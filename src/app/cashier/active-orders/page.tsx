@@ -41,17 +41,22 @@ export default function ActiveOrdersPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadFromIdb = useCallback(async (rid: string) => {
-    const [idbOrders, outbox] = await Promise.all([
-      getOrdersByRestaurant(rid),
-      getOutbox(rid),
-    ]);
-    // Sort newest first
-    const sorted = [...idbOrders].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-    setOrders(sorted);
-    setOutboxEntries(outbox);
-    setLoading(false);
+    try {
+      const [idbOrders, outbox] = await Promise.all([
+        getOrdersByRestaurant(rid),
+        getOutbox(rid),
+      ]);
+      // Sort newest first
+      const sorted = [...idbOrders].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setOrders(sorted);
+      setOutboxEntries(outbox);
+    } catch (err) {
+      console.warn("Failed to load from IDB:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const refreshFromServer = useCallback(async (rid: string) => {
@@ -101,28 +106,52 @@ export default function ActiveOrdersPage() {
     let cancelled = false;
 
     async function init() {
-      const supabase = createClient();
       let rid = typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_id") : null;
       let userRole = typeof window !== "undefined" ? localStorage.getItem("cached_role") : null;
 
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("restaurant_id, role")
-            .eq("id", user.id)
-            .single();
+      // 1. Immediately load local IndexedDB data if cached restaurant ID exists
+      if (rid) {
+        setRestaurantId(rid);
+        setIsAdmin(userRole === "admin" || userRole === "super_admin");
+        await loadFromIdb(rid);
+      }
 
-          if (profile?.restaurant_id) {
-            rid = profile.restaurant_id;
-            userRole = profile.role;
-            localStorage.setItem("cached_restaurant_id", profile.restaurant_id);
-            if (profile.role) localStorage.setItem("cached_role", profile.role);
+      // If no cached ID, turn off loading state immediately so UI isn't stuck
+      if (!rid && !cancelled) {
+        setLoading(false);
+      }
+
+      if (cancelled) return;
+
+      // 2. Perform online auth check in background
+      if (navigator.onLine) {
+        try {
+          const supabase = createClient();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("restaurant_id, role")
+              .eq("id", user.id)
+              .single();
+
+            if (profile?.restaurant_id) {
+              const newRid = profile.restaurant_id;
+              const newRole = profile.role;
+              localStorage.setItem("cached_restaurant_id", newRid);
+              if (newRole) localStorage.setItem("cached_role", newRole);
+
+              if (newRid !== rid) {
+                rid = newRid;
+                setRestaurantId(newRid);
+                setIsAdmin(newRole === "admin" || newRole === "super_admin");
+                await loadFromIdb(newRid);
+              }
+            }
           }
+        } catch {
+          // Ignore auth network errors in offline / poor network mode
         }
-      } catch {
-        // Offline: use cached_restaurant_id from localStorage
       }
 
       if (!rid || cancelled) {
@@ -130,35 +159,42 @@ export default function ActiveOrdersPage() {
         return;
       }
 
-      setRestaurantId(rid);
-      setIsAdmin(userRole === "admin" || userRole === "super_admin");
+      const activeRid = rid;
 
-      // Load IDB first (instant, works offline)
-      await loadFromIdb(rid);
-      if (!cancelled) setLoading(false);
-      if (cancelled) return;
-
-      // Fetch products for add-items modal
+      // 3. Fetch products & refresh orders from server in background if online
       if (navigator.onLine) {
-        const [prodRes, settingsRes] = await Promise.all([
-          supabase.from("products")
-            .select("id, code, name, status, product_variants(id, name, sale_price)")
-            .neq("status", "hidden").order("name"),
-          supabase.from("restaurant_settings")
-            .select("currency").eq("restaurant_id", rid).single(),
-        ]);
-        if (!cancelled) {
-          setProducts((prodRes.data as any) || []);
-          setCurrency(settingsRes.data?.currency || "PKR");
+        try {
+          const supabase = createClient();
+          const [prodRes, settingsRes] = await Promise.all([
+            supabase
+              .from("products")
+              .select("id, code, name, status, product_variants(id, name, sale_price)")
+              .neq("status", "hidden")
+              .order("name"),
+            supabase
+              .from("restaurant_settings")
+              .select("currency")
+              .eq("restaurant_id", activeRid)
+              .single(),
+          ]);
+          if (!cancelled) {
+            setProducts((prodRes.data as any) || []);
+            setCurrency(settingsRes.data?.currency || "PKR");
+          }
+        } catch {
+          // Ignore settings/product fetch errors
         }
+
+        if (!cancelled) refreshFromServer(activeRid).catch(console.warn);
       }
 
-      // Background refresh
-      if (!cancelled) refreshFromServer(rid).catch(console.warn);
+      if (!cancelled) setLoading(false);
 
       // Poll every 30 s when online
       pollRef.current = setInterval(() => {
-        if (navigator.onLine && !cancelled) refreshFromServer(rid).catch(console.warn);
+        if (navigator.onLine && !cancelled) {
+          refreshFromServer(activeRid).catch(console.warn);
+        }
       }, 30_000);
     }
 
