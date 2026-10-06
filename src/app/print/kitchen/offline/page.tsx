@@ -12,6 +12,7 @@
 
 import { useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import PrintTrigger from "../../PrintTrigger";
 
 interface SlipItem {
   product_name: string;
@@ -45,14 +46,9 @@ function OfflineKitchenSlipContent() {
     orderType === "takeaway"  ? "TAKEAWAY"  :
     orderType.toUpperCase();
 
-  // Auto-print when window loads
-  useEffect(() => {
-    const t = setTimeout(() => window.print(), 600);
-    return () => clearTimeout(t);
-  }, []);
-
   return (
     <>
+      <PrintTrigger />
       <style>{`
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {

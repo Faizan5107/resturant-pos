@@ -95,6 +95,62 @@ export default function ActiveOrdersBoard({
     router.refresh();
   };
 
+  const printKitchenSlip = (order: Order) => {
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
+
+    if (isOffline || isTempOrder) {
+      const slipParams = new URLSearchParams({
+        uuid: order.id,
+        orderNo: String(order.order_no),
+        orderType: order.order_type || "dine_in",
+        tableNo: order.table_no || "",
+        items: JSON.stringify(
+          (order.order_items || []).map((i) => ({
+            product_name: i.product_name,
+            variant_name: i.variant_name,
+            quantity: i.quantity,
+            notes: i.notes || "",
+          }))
+        ),
+      });
+      window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+    } else {
+      window.open(`/print/kitchen/${order.id}`, "_blank", "width=400,height=600");
+    }
+  };
+
+  const printBillSlip = (order: Order, isReprint = false) => {
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
+
+    if (isOffline || isTempOrder) {
+      const slipParams = new URLSearchParams({
+        orderNo: String(order.order_no),
+        orderType: order.order_type || "dine_in",
+        tableNo: order.table_no || "",
+        customerName: order.customer_name || "",
+        items: JSON.stringify(
+          (order.order_items || []).map((i) => ({
+            product_name: i.product_name,
+            variant_name: i.variant_name,
+            quantity: i.quantity,
+            line_total: i.line_total,
+            notes: i.notes || "",
+          }))
+        ),
+        subtotal: String(order.subtotal || 0),
+        taxAmount: String(order.tax_amount || 0),
+        total: String(order.total || 0),
+        currency,
+        ...(isReprint ? { reprint: "true" } : {}),
+      });
+      window.open(`/print/bill/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+    } else {
+      window.open(`/print/bill/${order.id}${isReprint ? "?reprint=true" : ""}`, "_blank", "width=400,height=600");
+    }
+  };
+
   const handleMarkPaid = async () => {
     if (!paymentModalOrder) return;
     setLoading(true);
@@ -102,9 +158,9 @@ export default function ActiveOrdersBoard({
     setLoading(false);
 
     if (res.success) {
-      const orderId = paymentModalOrder.id;
+      const targetOrder = paymentModalOrder;
       setPaymentModalOrder(null);
-      window.open(`/print/bill/${orderId}`, "_blank", "width=400,height=600");
+      printBillSlip(targetOrder);
       router.refresh();
     }
   };
@@ -339,9 +395,7 @@ export default function ActiveOrdersBoard({
                           Collect Payment
                         </button>
                         <button
-                          onClick={() =>
-                            window.open(`/print/kitchen/${order.id}`, "_blank", "width=400,height=600")
-                          }
+                          onClick={() => printKitchenSlip(order)}
                           className="px-2 py-1.5 border border-zinc-300 text-zinc-700 text-xs font-semibold rounded hover:border-black"
                           title="Kitchen Slip"
                         >
@@ -371,9 +425,7 @@ export default function ActiveOrdersBoard({
 
                   {isPaid && (
                     <button
-                      onClick={() =>
-                        window.open(`/print/bill/${order.id}?reprint=true`, "_blank", "width=400,height=600")
-                      }
+                      onClick={() => printBillSlip(order, true)}
                       className="w-full py-1.5 border border-black text-xs font-semibold rounded hover:bg-black hover:text-white"
                     >
                       Reprint Bill
