@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
 import { placeOrderAction } from "./actions";
-import { useOfflineStatus } from "@/lib/offline/useOfflineStatus";
-import { saveOfflineOrder, saveOfflineDraft, OfflineDraftRow } from "@/lib/offline/sqlite-db";
+import { useOffline } from "@/lib/offline/useOffline";
+import { addOrderToOutbox } from "@/lib/offline/outbox";
+import { saveOfflineDraft, OfflineDraftRow } from "@/lib/offline/sqlite-db";
 import DraftsModal from "./DraftsModal";
 
 interface Category {
@@ -65,6 +66,7 @@ export default function PosTerminal({
   taxRate = 0,
   enableServiceFee = false,
   serviceFeeAmount = 0,
+  restaurantId = "",
 }: {
   categories: Category[];
   products: Product[];
@@ -73,9 +75,10 @@ export default function PosTerminal({
   taxRate?: number;
   enableServiceFee?: boolean;
   serviceFeeAmount?: number;
+  restaurantId?: string;
 }) {
   const router = useRouter();
-  const { isOnline, pendingCount, isSyncing, triggerSync } = useOfflineStatus();
+  const { isOnline, pendingCount, isSyncing, syncPaused, lastSyncResult, reconciledNotice, triggerSync, resumeAfterLogin, dismissReconciled } = useOffline(restaurantId || null);
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -273,10 +276,31 @@ export default function PosTerminal({
 
     try {
       if (!isOnline) {
-        await saveOfflineOrder(payload, total);
+        // Save to outbox with temp order number
+        const { clientUuid, tempOrderNo } = await addOrderToOutbox(
+          restaurantId || "unknown",
+          payload,
+          total
+        );
         setLoading(false);
         clearForm();
-        setSuccessNotice("Order saved to local SQLite database (Offline). Will auto-sync when online.");
+        // Open offline kitchen slip (no prices, shows temp number)
+        const slipParams = new URLSearchParams({
+          uuid: clientUuid,
+          orderNo: tempOrderNo,
+          orderType: payload.order_type,
+          tableNo: payload.table_no || "",
+          items: JSON.stringify(payload.items.map((i: any) => ({
+            product_name: cart.find(c => c.variant_id === i.variant_id)?.product_name || "",
+            variant_name: cart.find(c => c.variant_id === i.variant_id)?.variant_name || "",
+            quantity: i.quantity,
+            notes: i.notes || "",
+            addons: i.addons || [],
+          }))),
+          notes: payload.notes || "",
+        });
+        window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+        setSuccessNotice(`Order ${tempOrderNo} saved offline. Will sync when connection is restored.`);
         return;
       }
 
@@ -284,10 +308,29 @@ export default function PosTerminal({
       setLoading(false);
 
       if (res.error) {
-        if (res.error.includes("Offline mode active") || res.error.includes("fetch failed")) {
-          await saveOfflineOrder(payload, total);
+        if (
+          res.error.includes("Offline mode active") ||
+          res.error.includes("fetch failed") ||
+          res.error.includes("Failed to fetch")
+        ) {
+          const { clientUuid, tempOrderNo } = await addOrderToOutbox(
+            restaurantId || "unknown",
+            payload,
+            total
+          );
           clearForm();
-          setSuccessNotice("Supabase unavailable. Order stored safely in local SQLite database.");
+          const slipParams = new URLSearchParams({
+            uuid: clientUuid, orderNo: tempOrderNo, orderType: payload.order_type,
+            tableNo: payload.table_no || "",
+            items: JSON.stringify(payload.items.map((i: any) => ({
+              product_name: cart.find(c => c.variant_id === i.variant_id)?.product_name || "",
+              variant_name: cart.find(c => c.variant_id === i.variant_id)?.variant_name || "",
+              quantity: i.quantity, notes: i.notes || "", addons: i.addons || [],
+            }))),
+            notes: payload.notes || "",
+          });
+          window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+          setSuccessNotice(`Supabase unreachable. Order ${tempOrderNo} saved offline.`);
         } else {
           setError(res.error);
         }
@@ -297,10 +340,25 @@ export default function PosTerminal({
         router.push("/cashier/active-orders");
       }
     } catch {
-      await saveOfflineOrder(payload, total);
+      const { clientUuid, tempOrderNo } = await addOrderToOutbox(
+        restaurantId || "unknown",
+        payload,
+        total
+      );
       setLoading(false);
       clearForm();
-      setSuccessNotice("Connection error. Order stored in local SQLite database.");
+      const slipParams = new URLSearchParams({
+        uuid: clientUuid, orderNo: tempOrderNo, orderType: payload.order_type,
+        tableNo: payload.table_no || "",
+        items: JSON.stringify(payload.items.map((i: any) => ({
+          product_name: cart.find(c => c.variant_id === i.variant_id)?.product_name || "",
+          variant_name: cart.find(c => c.variant_id === i.variant_id)?.variant_name || "",
+          quantity: i.quantity, notes: i.notes || "", addons: i.addons || [],
+        }))),
+        notes: payload.notes || "",
+      });
+      window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+      setSuccessNotice(`Connection error. Order ${tempOrderNo} saved offline.`);
     }
   };
 
@@ -360,34 +418,47 @@ export default function PosTerminal({
     <div className="space-y-3 h-[calc(100vh-100px)] flex flex-col">
       {/* Top Status Bar */}
       <div className="bg-white border border-black rounded-lg px-4 py-2 flex items-center justify-between shrink-0 shadow-sm">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
+          {/* Online/Offline indicator */}
           <div className="flex items-center space-x-2">
             <span
-              className={`w-2.5 h-2.5 rounded-full ${
-                isOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+              className={`w-2 h-2 rounded-full border border-black ${
+                isOnline ? "bg-black" : "bg-white"
               }`}
             />
             <span className="text-xs font-bold text-black">
-              {isOnline ? "Online (Supabase Connected)" : "Offline Mode (SQLite Active)"}
+              {isOnline ? "Online" : "Offline"}
             </span>
           </div>
 
+          {!isOnline && (
+            <span className="border border-black text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide">
+              Offline Mode
+            </span>
+          )}
+
           {pendingCount > 0 && (
-            <div className="flex items-center space-x-2 bg-amber-50 border border-amber-300 px-2.5 py-1 rounded-md">
-              <span className="text-xs font-semibold text-amber-900">
-                💾 {pendingCount} offline order{pendingCount > 1 ? "s" : ""} in SQLite
+            <div className="flex items-center space-x-2 border border-black px-2.5 py-1 rounded">
+              <span className="text-xs font-semibold text-black">
+                Pending sync: {pendingCount}
               </span>
-              {isOnline && (
+              {isOnline && !syncPaused && (
                 <button
                   type="button"
                   onClick={triggerSync}
                   disabled={isSyncing}
                   className="px-2 py-0.5 bg-black text-white text-[11px] font-bold rounded hover:bg-zinc-800 disabled:opacity-50"
                 >
-                  {isSyncing ? "Syncing..." : "Sync Now"}
+                  {isSyncing ? "Syncing…" : "Sync Now"}
                 </button>
               )}
             </div>
+          )}
+
+          {syncPaused && (
+            <span className="border border-black text-black text-[10px] font-bold px-2 py-0.5 rounded">
+              ⚠ Session expired — please log in again
+            </span>
           )}
         </div>
 
@@ -401,6 +472,20 @@ export default function PosTerminal({
           </button>
         </div>
       </div>
+
+      {/* Reconciliation notice */}
+      {reconciledNotice && (
+        <div className="border border-black bg-white rounded p-2.5 flex items-center justify-between text-xs">
+          <span className="text-black">
+            ℹ Order synced: temp <strong>{reconciledNotice.tempOrderNo}</strong> →
+            real <strong>{reconciledNotice.serverOrderNo}</strong>
+            {Math.abs(reconciledNotice.serverTotal - reconciledNotice.cachedTotal) > 0.01 && (
+              <> · Total updated to <strong>{formatMoney(reconciledNotice.serverTotal, currency)}</strong></>
+            )}
+          </span>
+          <button onClick={dismissReconciled} className="ml-3 font-bold text-black">✕</button>
+        </div>
+      )}
 
       {/* Main Grid */}
       <div className="grid grid-cols-12 gap-6 flex-1 overflow-hidden">

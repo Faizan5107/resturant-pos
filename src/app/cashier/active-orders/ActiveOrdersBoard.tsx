@@ -7,6 +7,7 @@ import { formatTime, formatDate, getOrderDateString, isOrderInBusinessDate } fro
 import { updateOrderStatusAction, markOrderPaidAction } from "../actions";
 import AddItemsModal from "./AddItemsModal";
 import AdminCancelModal from "./AdminCancelModal";
+import type { OutboxEntry } from "@/lib/offline/idb";
 
 interface OrderItem {
   id: string;
@@ -50,11 +51,13 @@ interface Product {
 
 export default function ActiveOrdersBoard({
   initialOrders,
+  outboxEntries = [],
   products = [],
   currency = "PKR",
   isAdmin = false,
 }: {
   initialOrders: Order[];
+  outboxEntries?: OutboxEntry[];
   products?: Product[];
   currency?: string;
   isAdmin?: boolean;
@@ -177,6 +180,40 @@ export default function ActiveOrdersBoard({
         )}
       </div>
 
+      {/* Pending Sync Orders (outbox entries awaiting network) */}
+      {activeTab === "open" && outboxEntries.filter(e => e.type === "place_order").length > 0 && (
+        <div className="space-y-2 mb-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Pending Sync</p>
+          <div className="grid grid-cols-3 gap-4">
+            {outboxEntries
+              .filter(e => e.type === "place_order")
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+              .map((entry) => {
+                const p = entry.payload as any;
+                return (
+                  <div key={entry.clientUuid} className="border border-black border-dashed rounded-lg p-4 bg-white flex flex-col space-y-2 opacity-80">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm">{entry.tempOrderNo}</span>
+                      <span className="border border-black text-black text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
+                        {entry.status === "needs_attention" ? "⚠ Needs Attention" : "Pending Sync"}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 capitalize">
+                      {p.order_type?.replace("_", " ")} {p.table_no ? `· Table ${p.table_no}` : ""}
+                    </div>
+                    {entry.status === "needs_attention" && entry.lastError && (
+                      <p className="text-[10px] text-black border border-black rounded p-1">{entry.lastError}</p>
+                    )}
+                    {entry.status === "failed" && entry.lastError && (
+                      <p className="text-[10px] text-zinc-500">Retrying… {entry.lastError}</p>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {/* Orders Grid */}
       {displayedOrders.length === 0 ? (
         <div className="border border-black p-12 rounded-lg bg-white text-center text-zinc-500 text-xs">
@@ -189,6 +226,7 @@ export default function ActiveOrdersBoard({
           {displayedOrders.map((order) => {
             const isPaid = order.status === "paid";
             const isCancelled = order.status === "cancelled";
+
 
             return (
               <div

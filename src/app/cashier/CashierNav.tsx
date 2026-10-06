@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/cashier", label: "New Order", exact: true },
+  { href: "/cashier/new-order", label: "New Order" },
   { href: "/cashier/active-orders", label: "Active Orders" },
   { href: "/cashier/expenses", label: "Expenses" },
   { href: "/cashier/inventory", label: "Receive Stock" },
@@ -15,8 +15,8 @@ export default function CashierNav() {
 
   return (
     <nav className="flex space-x-2">
-      {links.map(({ href, label, exact }) => {
-        const isActive = exact ? pathname === href : pathname.startsWith(href);
+      {links.map(({ href, label }) => {
+        const isActive = pathname === href || (href !== "/cashier/new-order" && pathname.startsWith(href));
         return (
           <Link
             key={href}

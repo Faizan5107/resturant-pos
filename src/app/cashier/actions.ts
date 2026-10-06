@@ -3,25 +3,29 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export async function placeOrderAction(payload: {
-  order_type: "dine_in" | "takeaway" | "delivery";
-  table_no?: string;
-  customer_name?: string;
-  customer_phone?: string;
-  delivery_address?: string;
-  delivery_fee?: number;
-  notes?: string;
-  items: Array<{
-    variant_id: string;
-    quantity: number;
+export async function placeOrderAction(
+  payload: {
+    order_type: "dine_in" | "takeaway" | "delivery";
+    table_no?: string;
+    customer_name?: string;
+    customer_phone?: string;
+    delivery_address?: string;
+    delivery_fee?: number;
     notes?: string;
-    addons?: Array<{ addon_name: string; price_delta: number }>;
-  }>;
-}) {
+    items: Array<{
+      variant_id: string;
+      quantity: number;
+      notes?: string;
+      addons?: Array<{ addon_name: string; price_delta: number }>;
+    }>;
+  },
+  clientUuid?: string | null
+) {
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("place_order", {
     p_payload: payload,
+    ...(clientUuid ? { p_client_uuid: clientUuid } : {}),
   });
 
   if (error) {
@@ -79,12 +83,16 @@ export async function placeOrderAction(payload: {
 export async function updateOrderStatusAction(orderId: string, newStatus: string) {
   const supabase = await createClient();
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthenticated", status: 401 };
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("restaurant_id")
+    .eq("id", user.id)
     .single();
 
-  if (!profile?.restaurant_id) return { error: "Unauthenticated" };
+  if (!profile?.restaurant_id) return { error: "Restaurant not found", status: 401 };
 
   const { error } = await supabase
     .from("orders")
@@ -92,7 +100,7 @@ export async function updateOrderStatusAction(orderId: string, newStatus: string
     .eq("id", orderId)
     .eq("restaurant_id", profile.restaurant_id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: error.message, status: 422 };
 
   // Log status change event
   await supabase.from("order_events").insert({
@@ -103,21 +111,24 @@ export async function updateOrderStatusAction(orderId: string, newStatus: string
   });
 
   revalidatePath("/cashier/active-orders");
-  return { success: true };
+  return { success: true, status: 200 };
 }
 
 export async function markOrderPaidAction(orderId: string, paymentMethod: "cash" | "card" | "online") {
   const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthenticated", status: 401 };
 
   const { data, error } = await supabase.rpc("mark_order_paid", {
     p_order_id: orderId,
     p_payment_method: paymentMethod,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: error.message, status: 422 };
 
   revalidatePath("/cashier/active-orders");
-  return { success: true };
+  return { success: true, status: 200 };
 }
 
 export async function cancelOrderAction(orderId: string, reason: string) {
