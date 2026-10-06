@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClientAsync } from "@/lib/supabase/client";
 
 function LoginForm() {
   const router = useRouter();
@@ -30,7 +30,7 @@ function LoginForm() {
     setError(null);
     setLoading(true);
 
-    const supabase = createClient();
+    const supabase = await createClientAsync();
     let loginEmail = email;
 
     // For cashier login: map username + restaurant code -> username@restaurantcode.internal
