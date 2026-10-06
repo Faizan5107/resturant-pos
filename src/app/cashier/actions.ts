@@ -1,0 +1,367 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+
+export async function placeOrderAction(payload: {
+  order_type: "dine_in" | "takeaway" | "delivery";
+  table_no?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  delivery_address?: string;
+  delivery_fee?: number;
+  notes?: string;
+  items: Array<{
+    variant_id: string;
+    quantity: number;
+    notes?: string;
+    addons?: Array<{ addon_name: string; price_delta: number }>;
+  }>;
+}) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("place_order", {
+    p_payload: payload,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  if (data?.order_id) {
+    const { createAdminClient } = await import("@/lib/supabase/server");
+    const adminClient = createAdminClient();
+
+    // Fetch current order details
+    const { data: ord } = await adminClient
+      .from("orders")
+      .select("subtotal, tax_amount, order_type, restaurant_id")
+      .eq("id", data.order_id)
+      .single();
+
+    if (ord) {
+      // Fetch restaurant settings specifically for this restaurant
+      const { data: settings } = await adminClient
+        .from("restaurant_settings")
+        .select("enable_service_fee, service_fee_amount")
+        .eq("restaurant_id", ord.restaurant_id)
+        .maybeSingle();
+
+      const subtotal = Number(ord.subtotal || 0);
+      const taxAmount = Number(ord.tax_amount || 0);
+      const deliveryFee = ord.order_type === "delivery" ? Number(payload.delivery_fee || 0) : 0;
+
+      // Apply service fee only for dine-in if enabled in settings
+      const enableServiceFee = settings?.enable_service_fee ?? false;
+      const serviceFeeAmount = Number(settings?.service_fee_amount || 0);
+      const serviceFee = ord.order_type === "dine_in" && enableServiceFee ? serviceFeeAmount : 0;
+
+      const newTotal = subtotal + taxAmount + deliveryFee + serviceFee;
+
+      await adminClient
+        .from("orders")
+        .update({
+          delivery_fee: deliveryFee,
+          service_fee: serviceFee,
+          total: newTotal,
+        })
+        .eq("id", data.order_id);
+
+      data.total = newTotal;
+    }
+  }
+
+  revalidatePath("/cashier");
+  revalidatePath("/cashier/active-orders");
+  return { success: true, result: data };
+}
+
+export async function updateOrderStatusAction(orderId: string, newStatus: string) {
+  const supabase = await createClient();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("restaurant_id")
+    .single();
+
+  if (!profile?.restaurant_id) return { error: "Unauthenticated" };
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: newStatus, updated_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .eq("restaurant_id", profile.restaurant_id);
+
+  if (error) return { error: error.message };
+
+  // Log status change event
+  await supabase.from("order_events").insert({
+    restaurant_id: profile.restaurant_id,
+    order_id: orderId,
+    event: "status_changed",
+    note: `Status changed to ${newStatus}`,
+  });
+
+  revalidatePath("/cashier/active-orders");
+  return { success: true };
+}
+
+export async function markOrderPaidAction(orderId: string, paymentMethod: "cash" | "card" | "online") {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("mark_order_paid", {
+    p_order_id: orderId,
+    p_payment_method: paymentMethod,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/cashier/active-orders");
+  return { success: true };
+}
+
+export async function cancelOrderAction(orderId: string, reason: string) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("cancel_order", {
+    p_order_id: orderId,
+    p_reason: reason,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/cashier/active-orders");
+  return { success: true };
+}
+
+/**
+ * Allows a cashier to cancel an order if approved with Admin credentials.
+ */
+export async function adminCancelOrderWithAuthAction(payload: {
+  orderId: string;
+  reason: string;
+  adminEmail: string;
+  adminPassword?: string;
+}) {
+  const supabase = await createClient();
+
+  // Verify the admin credentials
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email: payload.adminEmail,
+    password: payload.adminPassword || "",
+  });
+
+  if (authError || !authData.user) {
+    return { error: "Invalid Admin credentials. Cancellation denied." };
+  }
+
+  // Verify user is actually an admin
+  const { data: adminProfile } = await supabase
+    .from("profiles")
+    .select("restaurant_id, role")
+    .eq("id", authData.user.id)
+    .single();
+
+  if (!adminProfile || (adminProfile.role !== "admin" && adminProfile.role !== "super_admin")) {
+    return { error: "This user does not have Administrator rights." };
+  }
+
+  // Cancel order via adminClient
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const adminClient = createAdminClient();
+
+  const { error: cancelError } = await adminClient
+    .from("orders")
+    .update({
+      status: "cancelled",
+      cancelled_by: authData.user.id,
+      cancel_reason: payload.reason,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", payload.orderId)
+    .eq("restaurant_id", adminProfile.restaurant_id);
+
+  if (cancelError) return { error: cancelError.message };
+
+  await adminClient.from("order_events").insert({
+    restaurant_id: adminProfile.restaurant_id,
+    order_id: payload.orderId,
+    event: "cancelled",
+    by_user: authData.user.id,
+    note: `Cancelled by Admin (${adminProfile.role}): ${payload.reason}`,
+  });
+
+  revalidatePath("/cashier/active-orders");
+  return { success: true };
+}
+
+/**
+ * Adds new items to an existing punched order.
+ * Only ADDITION of items is allowed; existing items are preserved.
+ */
+export async function addItemsToOrderAction(payload: {
+  orderId: string;
+  items: Array<{
+    variant_id: string;
+    quantity: number;
+    notes?: string;
+    addons?: Array<{ addon_name: string; price_delta: number }>;
+  }>;
+}) {
+  if (!payload.items || payload.items.length === 0) {
+    return { error: "Please select at least one item to add." };
+  }
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthenticated" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("restaurant_id")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.restaurant_id) return { error: "Restaurant context missing" };
+
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const adminClient = createAdminClient();
+
+  // Fetch current order
+  const { data: order, error: orderErr } = await adminClient
+    .from("orders")
+    .select("id, status, subtotal, tax_amount, total, delivery_fee, restaurant_id")
+    .eq("id", payload.orderId)
+    .eq("restaurant_id", profile.restaurant_id)
+    .single();
+
+  if (orderErr || !order) return { error: "Order not found" };
+
+  if (order.status === "paid" || order.status === "cancelled") {
+    return { error: `Cannot add items to an order that is already ${order.status}.` };
+  }
+
+  // Get restaurant tax rate
+  const { data: settings } = await adminClient
+    .from("restaurant_settings")
+    .select("tax_rate")
+    .eq("restaurant_id", profile.restaurant_id)
+    .single();
+
+  const taxRate = Number(settings?.tax_rate || 0);
+
+  let addedSubtotal = 0;
+  const addedItemNames: string[] = [];
+
+  for (const item of payload.items) {
+    if (item.quantity <= 0) continue;
+
+    // Fetch product variant details
+    const { data: variant, error: varErr } = await adminClient
+      .from("product_variants")
+      .select(`
+        id,
+        name,
+        sale_price,
+        products (name, status)
+      `)
+      .eq("id", item.variant_id)
+      .eq("restaurant_id", profile.restaurant_id)
+      .single();
+
+    if (varErr || !variant) {
+      return { error: `Invalid product variant selected.` };
+    }
+
+    const prod = variant.products as any;
+    if (prod?.status === "out_of_stock") {
+      return { error: `Product ${prod?.name} is out of stock.` };
+    }
+
+    const unitPrice = Number(variant.sale_price) || 0;
+    const lineTotal = unitPrice * item.quantity;
+    addedSubtotal += lineTotal;
+    addedItemNames.push(`${item.quantity}x ${prod?.name} (${variant.name})`);
+
+    // Insert order item
+    const { data: insertedItem, error: itemInsertErr } = await adminClient
+      .from("order_items")
+      .insert({
+        restaurant_id: profile.restaurant_id,
+        order_id: order.id,
+        variant_id: variant.id,
+        product_name: prod?.name || "Product",
+        variant_name: variant.name,
+        unit_price: unitPrice,
+        quantity: item.quantity,
+        line_total: lineTotal,
+        notes: item.notes || null,
+      })
+      .select("id")
+      .single();
+
+    if (itemInsertErr) {
+      return { error: `Failed to insert item: ${itemInsertErr.message}` };
+    }
+
+    // Snapshot cost for admin profit tracking
+    const { data: costRec } = await adminClient
+      .from("variant_costs")
+      .select("cost_price")
+      .eq("variant_id", variant.id)
+      .single();
+
+    await adminClient.from("order_item_costs").insert({
+      order_item_id: insertedItem.id,
+      restaurant_id: profile.restaurant_id,
+      unit_cost: Number(costRec?.cost_price || 0),
+    });
+
+    // Process Addons if any
+    if (item.addons && item.addons.length > 0) {
+      for (const addon of item.addons) {
+        const delta = Number(addon.price_delta) || 0;
+        await adminClient.from("order_item_addons").insert({
+          restaurant_id: profile.restaurant_id,
+          order_item_id: insertedItem.id,
+          addon_name: addon.addon_name,
+          price_delta: delta,
+        });
+        addedSubtotal += delta * item.quantity;
+      }
+    }
+  }
+
+  // Update Order totals
+  const newSubtotal = Number(order.subtotal) + addedSubtotal;
+  const newTaxAmount = Math.round(newSubtotal * (taxRate / 100) * 100) / 100;
+  const deliveryFee = Number((order as any).delivery_fee || 0);
+  const newTotal = newSubtotal + newTaxAmount + deliveryFee;
+
+  await adminClient
+    .from("orders")
+    .update({
+      subtotal: newSubtotal,
+      tax_amount: newTaxAmount,
+      total: newTotal,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", order.id);
+
+  // Log status change / item added event
+  await adminClient.from("order_events").insert({
+    restaurant_id: profile.restaurant_id,
+    order_id: order.id,
+    event: "status_changed",
+    by_user: user.id,
+    note: `Added items to order: ${addedItemNames.join(", ")}`,
+  });
+
+  revalidatePath("/cashier/active-orders");
+  return {
+    success: true,
+    addedItems: addedItemNames,
+    newTotal,
+  };
+}
+
