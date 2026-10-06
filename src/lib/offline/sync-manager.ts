@@ -71,6 +71,10 @@ export async function syncNow(): Promise<SyncResult> {
   if (!navigator.onLine) return result;
   if (_isSyncing) return result;
   if (_isPaused) return result;
+
+  if (!_currentRestaurantId) {
+    _currentRestaurantId = localStorage.getItem("cached_restaurant_id");
+  }
   if (!_currentRestaurantId) return result;
 
   _isSyncing = true;
@@ -277,6 +281,11 @@ export function resumeSync(): void {
 export async function retryOutboxItem(clientUuid: string): Promise<void> {
   const entry = await getOutboxEntry(clientUuid);
   if (entry) {
+    if (!_currentRestaurantId && entry.restaurant_id) {
+      _currentRestaurantId = entry.restaurant_id;
+    }
+    _isPaused = false;
+    _isSyncing = false;
     await updateOutboxEntry({
       ...entry,
       status: "pending",
@@ -285,7 +294,7 @@ export async function retryOutboxItem(clientUuid: string): Promise<void> {
       lastError: undefined,
     });
     dispatchOutboxChanged();
-    syncNow().catch(console.warn);
+    await syncNow();
   }
 }
 

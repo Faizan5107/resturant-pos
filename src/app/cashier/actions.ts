@@ -23,18 +23,29 @@ export async function placeOrderAction(
 ) {
   const supabase = await createClient();
 
-  let { data, error } = await supabase.rpc("place_order", {
-    p_payload: payload,
-    ...(clientUuid ? { p_client_uuid: clientUuid } : {}),
-  });
+  let data: any = null;
+  let error: any = null;
 
-  // Fallback: If migration 00015 has not been run on Supabase yet, place_order only accepts p_payload
-  if (error && (error.message.includes("Could not find the function") || error.message.includes("schema cache"))) {
+  if (clientUuid) {
+    const res = await supabase.rpc("place_order", {
+      p_payload: payload,
+      p_client_uuid: clientUuid,
+    });
+    data = res.data;
+    error = res.error;
+  }
+
+  // Fallback: If clientUuid was not provided OR if the RPC failed (e.g. signature mismatch on local DB)
+  if (!clientUuid || error) {
     const fallbackRes = await supabase.rpc("place_order", {
       p_payload: payload,
     });
-    data = fallbackRes.data;
-    error = fallbackRes.error;
+    if (!fallbackRes.error) {
+      data = fallbackRes.data;
+      error = null;
+    } else if (!data) {
+      error = fallbackRes.error;
+    }
   }
 
   if (error) {
