@@ -101,11 +101,11 @@ export default function ActiveOrdersPage() {
     let cancelled = false;
 
     async function init() {
+      const supabase = createClient();
       let rid = typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_id") : null;
       let userRole = typeof window !== "undefined" ? localStorage.getItem("cached_role") : null;
 
       try {
-        const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const { data: profile } = await supabase
@@ -117,7 +117,7 @@ export default function ActiveOrdersPage() {
           if (profile?.restaurant_id) {
             rid = profile.restaurant_id;
             userRole = profile.role;
-            localStorage.setItem("cached_restaurant_id", rid);
+            localStorage.setItem("cached_restaurant_id", profile.restaurant_id);
             if (profile.role) localStorage.setItem("cached_role", profile.role);
           }
         }
@@ -125,13 +125,17 @@ export default function ActiveOrdersPage() {
         // Offline: use cached_restaurant_id from localStorage
       }
 
-      if (!rid || cancelled) return;
+      if (!rid || cancelled) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
 
       setRestaurantId(rid);
       setIsAdmin(userRole === "admin" || userRole === "super_admin");
 
       // Load IDB first (instant, works offline)
       await loadFromIdb(rid);
+      if (!cancelled) setLoading(false);
       if (cancelled) return;
 
       // Fetch products for add-items modal

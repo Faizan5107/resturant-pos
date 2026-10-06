@@ -175,7 +175,7 @@ export default function NewOrderPage() {
             .single();
           if (profile?.restaurant_id) {
             restaurantId = profile.restaurant_id;
-            localStorage.setItem("cached_restaurant_id", restaurantId);
+            localStorage.setItem("cached_restaurant_id", profile.restaurant_id);
           }
         }
       } catch {
