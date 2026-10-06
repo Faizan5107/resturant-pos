@@ -272,6 +272,11 @@ export async function getPendingOutboxCount(restaurantId: string): Promise<numbe
   ).length;
 }
 
+export async function getOutboxEntry(clientUuid: string): Promise<OutboxEntry | undefined> {
+  const db = await getDb();
+  return db.get("outbox", clientUuid);
+}
+
 export async function removeOutboxEntry(clientUuid: string): Promise<void> {
   const db = await getDb();
   await db.delete("outbox", clientUuid);
@@ -282,14 +287,25 @@ export async function updateOutboxEntry(entry: OutboxEntry): Promise<void> {
   await db.put("outbox", entry);
 }
 
-/** On app start: reset any entries stuck in 'syncing' (e.g. crash mid-sync) */
+/** On app start: reset any entries stuck in 'syncing' or failed due to RPC schema cache mismatches */
 export async function resetStuckSyncingEntries(restaurantId: string): Promise<void> {
   const entries = await getOutboxEntries(restaurantId);
   const db = await getDb();
   const tx = db.transaction("outbox", "readwrite");
   for (const e of entries) {
-    if (e.status === "syncing") {
-      await tx.store.put({ ...e, status: "pending", nextRetryAt: Date.now() });
+    if (
+      e.status === "syncing" ||
+      (e.status === "needs_attention" &&
+        e.lastError &&
+        (e.lastError.includes("Could not find the function") || e.lastError.includes("schema cache")))
+    ) {
+      await tx.store.put({
+        ...e,
+        status: "pending",
+        nextRetryAt: Date.now(),
+        retryCount: 0,
+        lastError: undefined,
+      });
     }
   }
   await tx.done;

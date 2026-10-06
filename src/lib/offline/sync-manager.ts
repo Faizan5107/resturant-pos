@@ -9,7 +9,7 @@
  * On app start call resetStuckSyncingEntries() before the first sync attempt.
  */
 
-import { OutboxEntry, resetStuckSyncingEntries, saveOrders } from "./idb";
+import { OutboxEntry, resetStuckSyncingEntries, saveOrders, getOutboxEntry } from "./idb";
 import {
   getOutboxEntries,
   removeOutboxEntry,
@@ -271,6 +271,28 @@ function handleOnline(): void {
 export function resumeSync(): void {
   _isPaused = false;
   syncNow().catch(console.warn);
+}
+
+/** Reset a failed/needs_attention outbox entry to pending and trigger sync immediately */
+export async function retryOutboxItem(clientUuid: string): Promise<void> {
+  const entry = await getOutboxEntry(clientUuid);
+  if (entry) {
+    await updateOutboxEntry({
+      ...entry,
+      status: "pending",
+      nextRetryAt: Date.now(),
+      retryCount: 0,
+      lastError: undefined,
+    });
+    dispatchOutboxChanged();
+    syncNow().catch(console.warn);
+  }
+}
+
+/** Remove an outbox entry completely (e.g. dismissed by cashier) */
+export async function removeOutboxItem(clientUuid: string): Promise<void> {
+  await removeOutboxEntry(clientUuid);
+  dispatchOutboxChanged();
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────

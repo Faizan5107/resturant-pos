@@ -8,6 +8,7 @@ import { updateOrderStatusAction, markOrderPaidAction } from "../actions";
 import AddItemsModal from "./AddItemsModal";
 import AdminCancelModal from "./AdminCancelModal";
 import type { OutboxEntry } from "@/lib/offline/idb";
+import { retryOutboxItem, removeOutboxItem } from "@/lib/offline/sync-manager";
 
 interface OrderItem {
   id: string;
@@ -258,7 +259,25 @@ export default function ActiveOrdersBoard({
                       {p.order_type?.replace("_", " ")} {p.table_no ? `· Table ${p.table_no}` : ""}
                     </div>
                     {entry.status === "needs_attention" && entry.lastError && (
-                      <p className="text-[10px] text-black border border-black rounded p-1">{entry.lastError}</p>
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5 break-words font-medium">
+                          {entry.lastError}
+                        </p>
+                        <div className="flex space-x-1.5 pt-0.5">
+                          <button
+                            onClick={() => retryOutboxItem(entry.clientUuid)}
+                            className="flex-1 py-1 bg-black text-white text-[10px] font-bold rounded hover:bg-zinc-800"
+                          >
+                            Retry Sync
+                          </button>
+                          <button
+                            onClick={() => removeOutboxItem(entry.clientUuid)}
+                            className="px-2 py-1 border border-zinc-300 text-zinc-600 text-[10px] font-semibold rounded hover:bg-zinc-100"
+                          >
+                            Discard
+                          </button>
+                        </div>
+                      </div>
                     )}
                     {entry.status === "failed" && entry.lastError && (
                       <p className="text-[10px] text-zinc-500">Retrying… {entry.lastError}</p>

@@ -23,6 +23,8 @@ import {
 } from "@/lib/offline/idb";
 import { getOutbox } from "@/lib/offline/outbox";
 import { OutboxEntry } from "@/lib/offline/idb";
+import { configureSyncFunctions, startSyncManager } from "@/lib/offline/sync-manager";
+import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction } from "@/app/cashier/actions";
 import ActiveOrdersBoard from "./ActiveOrdersBoard";
 
 interface Product {
@@ -113,6 +115,31 @@ export default function ActiveOrdersPage() {
       if (rid) {
         setRestaurantId(rid);
         setIsAdmin(userRole === "admin" || userRole === "super_admin");
+
+        configureSyncFunctions({
+          placeOrder: async (payload: unknown, clientUuid: string) => {
+            const res = await placeOrderAction(payload as any, clientUuid);
+            return {
+              success: !!res.success,
+              result: res.result ? {
+                order_id: res.result.order_id,
+                order_no: res.result.order_no,
+                total: res.result.total,
+              } : undefined,
+              error: res.error,
+            };
+          },
+          statusChange: async (orderId: string, status: string) => {
+            const res = await updateOrderStatusAction(orderId, status);
+            return { success: !!res.success, error: res.error, status: res.status };
+          },
+          payment: async (orderId: string, method: string) => {
+            const res = await markOrderPaidAction(orderId, method as any);
+            return { success: !!res.success, error: res.error, status: res.status };
+          },
+        });
+        startSyncManager(rid);
+
         await loadFromIdb(rid);
       }
 
