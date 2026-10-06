@@ -101,21 +101,34 @@ export default function ActiveOrdersPage() {
     let cancelled = false;
 
     async function init() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
+      let rid = typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_id") : null;
+      let userRole = typeof window !== "undefined" ? localStorage.getItem("cached_role") : null;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("restaurant_id, role")
-        .eq("id", user.id)
-        .single();
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("restaurant_id, role")
+            .eq("id", user.id)
+            .single();
 
-      const rid = profile?.restaurant_id;
+          if (profile?.restaurant_id) {
+            rid = profile.restaurant_id;
+            userRole = profile.role;
+            localStorage.setItem("cached_restaurant_id", rid);
+            if (profile.role) localStorage.setItem("cached_role", profile.role);
+          }
+        }
+      } catch {
+        // Offline: use cached_restaurant_id from localStorage
+      }
+
       if (!rid || cancelled) return;
 
       setRestaurantId(rid);
-      setIsAdmin(profile.role === "admin" || profile.role === "super_admin");
+      setIsAdmin(userRole === "admin" || userRole === "super_admin");
 
       // Load IDB first (instant, works offline)
       await loadFromIdb(rid);

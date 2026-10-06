@@ -91,6 +91,7 @@ export default function PosTerminal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [offlinePrintUrl, setOfflinePrintUrl] = useState<string | null>(null);
 
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
@@ -284,7 +285,6 @@ export default function PosTerminal({
         );
         setLoading(false);
         clearForm();
-        // Open offline kitchen slip (no prices, shows temp number)
         const slipParams = new URLSearchParams({
           uuid: clientUuid,
           orderNo: tempOrderNo,
@@ -299,8 +299,10 @@ export default function PosTerminal({
           }))),
           notes: payload.notes || "",
         });
-        window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
-        setSuccessNotice(`Order ${tempOrderNo} saved offline. Will sync when connection is restored.`);
+        const url = `/print/kitchen/offline?${slipParams.toString()}`;
+        setOfflinePrintUrl(url);
+        try { window.open(url, "_blank", "width=400,height=600"); } catch {}
+        setSuccessNotice(`Order ${tempOrderNo} saved offline. Will sync when online.`);
         return;
       }
 
@@ -329,14 +331,16 @@ export default function PosTerminal({
             }))),
             notes: payload.notes || "",
           });
-          window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+          const url = `/print/kitchen/offline?${slipParams.toString()}`;
+          setOfflinePrintUrl(url);
+          try { window.open(url, "_blank", "width=400,height=600"); } catch {}
           setSuccessNotice(`Supabase unreachable. Order ${tempOrderNo} saved offline.`);
         } else {
           setError(res.error);
         }
       } else if (res.result?.order_id) {
         clearForm();
-        window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=400,height=600");
+        try { window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=400,height=600"); } catch {}
         router.push("/cashier/active-orders");
       }
     } catch {
@@ -357,7 +361,9 @@ export default function PosTerminal({
         }))),
         notes: payload.notes || "",
       });
-      window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=400,height=600");
+      const url = `/print/kitchen/offline?${slipParams.toString()}`;
+      setOfflinePrintUrl(url);
+      try { window.open(url, "_blank", "width=400,height=600"); } catch {}
       setSuccessNotice(`Connection error. Order ${tempOrderNo} saved offline.`);
     }
   };
@@ -815,6 +821,21 @@ export default function PosTerminal({
 
           {/* Cart Bottom Summary & Checkout Buttons */}
           <div className="p-4 border-t border-zinc-200 bg-zinc-50 space-y-3 shrink-0">
+            {successNotice && (
+              <div className="p-3 border border-black bg-white text-black text-xs rounded font-medium space-y-2 shadow-sm">
+                <p>{successNotice}</p>
+                {offlinePrintUrl && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(offlinePrintUrl, "_blank", "width=400,height=600")}
+                    className="w-full py-2 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    🖨️ Print Kitchen Slip
+                  </button>
+                )}
+              </div>
+            )}
+
             {error && (
               <div className="p-2 border border-black bg-zinc-100 text-black text-xs rounded font-medium">
                 {error}

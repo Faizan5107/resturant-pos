@@ -162,17 +162,26 @@ export default function NewOrderPage() {
     let cancelled = false;
 
     async function init() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
+      let restaurantId = typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_id") : null;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("restaurant_id")
-        .eq("id", user.id)
-        .single();
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("restaurant_id")
+            .eq("id", user.id)
+            .single();
+          if (profile?.restaurant_id) {
+            restaurantId = profile.restaurant_id;
+            localStorage.setItem("cached_restaurant_id", restaurantId);
+          }
+        }
+      } catch {
+        // Offline: use cached_restaurant_id from localStorage
+      }
 
-      const restaurantId = profile?.restaurant_id;
       if (!restaurantId || cancelled) return;
 
       // Configure sync functions (inject server actions into sync manager)
