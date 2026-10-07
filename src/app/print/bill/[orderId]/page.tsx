@@ -395,7 +395,7 @@ export default async function FinalBillPage({
             borderTop: "1px dashed #0c0b0bff",
             paddingTop: "6px",
             textAlign: "center",
-            fontSize: "10px",
+            fontSize: "12px",
             fontWeight: "bold",
             color: "#000",
             marginBottom: "30px",

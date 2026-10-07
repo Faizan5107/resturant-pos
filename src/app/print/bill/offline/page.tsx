@@ -319,7 +319,7 @@ function OfflineBillSlipContent() {
             borderTop: "1px dashed #000",
             paddingTop: "6px",
             textAlign: "center",
-            fontSize: "10px",
+            fontSize: "12px",
             fontWeight: "bold",
             color: "#000",
             marginBottom: "30px",
