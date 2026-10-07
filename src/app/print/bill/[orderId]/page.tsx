@@ -116,11 +116,11 @@ export default async function FinalBillPage({
             overflow: visible !important;
           }
           .receipt-container {
-            width: 70mm !important;
-            max-width: 70mm !important;
+            width: 75mm !important;
+            max-width: 75mm !important;
             margin: 0 !important;
             padding-left: 2mm !important;
-            padding-right: 4mm !important;
+            padding-right: 3mm !important;
             padding-bottom: 80mm !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -138,10 +138,10 @@ export default async function FinalBillPage({
           fontFamily: "Arial, Helvetica, sans-serif",
           background: "#fff",
           color: "#000",
-          width: "70mm",
-          maxWidth: "70mm",
+          width: "75mm",
+          maxWidth: "75mm",
           margin: "0",
-          padding: "0 4mm 35mm 2mm",
+          padding: "0 3mm 35mm 2mm",
           fontSize: "11px",
           lineHeight: "1.4",
           boxSizing: "border-box",
@@ -238,7 +238,7 @@ export default async function FinalBillPage({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 42px 75px",
+            gridTemplateColumns: "1fr 38px 70px",
             fontWeight: "bold",
             fontSize: "14px",
             textTransform: "uppercase",
@@ -269,7 +269,7 @@ export default async function FinalBillPage({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 42px 75px",
+                    gridTemplateColumns: "1fr 38px 70px",
                     fontSize: "12px",
                     fontWeight: "bold",
                     padding: "0 4px",

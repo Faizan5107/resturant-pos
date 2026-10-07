@@ -61,7 +61,7 @@ function OfflineKitchenSlipContent() {
         @page { margin: 0; size: 80mm auto; }
         @media print {
           html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
-          .receipt-container { width: 70mm !important; max-width: 70mm !important; margin: 0 !important; padding-left: 2mm !important; padding-right: 4mm !important; padding-bottom: 50mm !important; box-sizing: border-box !important; }
+          .receipt-container { width: 75mm !important; max-width: 75mm !important; margin: 0 !important; padding-left: 2mm !important; padding-right: 3mm !important; padding-bottom: 50mm !important; box-sizing: border-box !important; }
         }
       `}</style>
 
@@ -71,10 +71,10 @@ function OfflineKitchenSlipContent() {
           fontFamily: "Arial, Helvetica, sans-serif",
           background: "#fff",
           color: "#000",
-          width: "70mm",
-          maxWidth: "70mm",
+          width: "75mm",
+          maxWidth: "75mm",
           margin: "0",
-          padding: "5mm 4mm 25mm 2mm",
+          padding: "5mm 3mm 25mm 2mm",
           fontSize: "11px",
           lineHeight: "1.4",
           boxSizing: "border-box",
