@@ -401,10 +401,10 @@ export default async function FinalBillPage({
             marginBottom: "30px",
           }}
         >
-          <div>Developed by: Axor Solution | Contact No: +923422352913</div>
-          {/* <div
-           style={{ marginTop: "2px" }}
-          >Contact No: +923422352913</div> */}
+          <div>Developed by: Axor Solution </div>
+          <div
+            style={{ marginTop: "2px" }}
+          >Contact No: +923422352913</div>
         </div>
 
         {/* ── 10. THERMAL PAPER CUT FEED (Generous spacing to feed paper past hardware cutter blade) ── */}

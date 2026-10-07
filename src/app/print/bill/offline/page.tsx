@@ -325,7 +325,10 @@ function OfflineBillSlipContent() {
             marginBottom: "30px",
           }}
         >
-          <div>Developed by: Axor Solution | Contact No: +923422352913</div>
+          <div>Developed by: Axor Solution </div>
+          <div
+            style={{ marginTop: "2px" }}
+          >Contact No: +923422352913</div>
         </div>
 
         <div style={{ height: "80mm" }} />
