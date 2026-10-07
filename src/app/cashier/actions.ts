@@ -151,7 +151,65 @@ export async function markOrderPaidAction(orderId: string, paymentMethod: "cash"
   return { success: true, status: 200 };
 }
 
+/**
+ * Fetches all orders for the authenticated user's restaurant.
+ * Uses server-side Supabase auth (cookies) so it always works regardless of
+ * whether NEXT_PUBLIC_ env vars are available in the browser bundle.
+ */
+export async function fetchOrdersAction(): Promise<{
+  orders?: Array<{
+    id: string; order_no: string; order_type: string; table_no?: string;
+    customer_name?: string; status: string; subtotal: number; tax_amount: number;
+    total: number; payment_method?: string; cancel_reason?: string;
+    created_at: string; updated_at?: string;
+    order_items: Array<{
+      id: string; product_name: string; variant_name: string;
+      unit_price: number; quantity: number; line_total: number; notes?: string;
+    }>;
+  }>;
+  restaurantId?: string;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthenticated" };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("restaurant_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.restaurant_id) return { error: "Restaurant not found" };
+
+    const { data: ordersData, error } = await supabase
+      .from("orders")
+      .select(`
+        id, order_no, order_type, table_no, customer_name, status,
+        subtotal, tax_amount, total, payment_method, cancel_reason,
+        created_at, updated_at,
+        order_items(id, product_name, variant_name, unit_price, quantity, line_total, notes)
+      `)
+      .eq("restaurant_id", profile.restaurant_id)
+      .order("created_at", { ascending: false });
+
+    if (error) return { error: error.message };
+
+    return {
+      restaurantId: profile.restaurant_id,
+      orders: (ordersData as any[]).map((o) => ({
+        ...o,
+        order_items: o.order_items || [],
+      })),
+    };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Fetch failed" };
+  }
+}
+
 export async function cancelOrderAction(orderId: string, reason: string) {
+
   const supabase = await createClient();
 
   const { data, error } = await supabase.rpc("cancel_order", {

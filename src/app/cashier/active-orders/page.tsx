@@ -5,7 +5,7 @@
  *
  * On mount:
  *  1. Reads orders from IndexedDB immediately → renders
- *  2. If online, fetches fresh from Supabase in background → updates IDB + re-renders
+ *  2. If online, fetches fresh via server action (always auth'd) → updates IDB + re-renders
  *  3. Polls every 30 seconds while online to catch kitchen status updates
  *
  * Outbox "pending sync" orders are shown inline with a badge.
@@ -13,18 +13,16 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   getOrdersByRestaurant,
   saveOrders,
   setMeta,
-  getMeta,
   OrderEntry,
 } from "@/lib/offline/idb";
 import { getOutbox } from "@/lib/offline/outbox";
 import { OutboxEntry } from "@/lib/offline/idb";
 import { configureSyncFunctions, startSyncManager } from "@/lib/offline/sync-manager";
-import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction } from "@/app/cashier/actions";
+import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchOrdersAction } from "@/app/cashier/actions";
 import ActiveOrdersBoard from "./ActiveOrdersBoard";
 
 interface Product {
@@ -63,24 +61,16 @@ export default function ActiveOrdersPage() {
 
   const refreshFromServer = useCallback(async (rid: string) => {
     if (!navigator.onLine) return;
-    const supabase = createClient();
-
     try {
-      const { data: ordersData } = await supabase
-        .from("orders")
-        .select(`
-          id, order_no, order_type, table_no, customer_name, status,
-          subtotal, tax_amount, total, payment_method, cancel_reason,
-          created_at, updated_at,
-          order_items(id, product_name, variant_name, unit_price, quantity, line_total, notes)
-        `)
-        .eq("restaurant_id", rid)
-        .order("created_at", { ascending: false });
-
-      if (ordersData) {
-        const mapped: OrderEntry[] = (ordersData as any[]).map((o) => ({
+      // Use server action instead of browser-side Supabase client.
+      // This ensures auth always works via server cookies regardless of
+      // whether NEXT_PUBLIC_ env vars are set in the browser bundle.
+      const res = await fetchOrdersAction();
+      if (res.orders) {
+        const resolvedRid = res.restaurantId || rid;
+        const mapped: OrderEntry[] = res.orders.map((o) => ({
           id: o.id,
-          restaurant_id: rid,
+          restaurant_id: resolvedRid,
           order_no: o.order_no,
           order_type: o.order_type,
           table_no: o.table_no,
@@ -96,8 +86,8 @@ export default function ActiveOrdersPage() {
           order_items: o.order_items || [],
         }));
         await saveOrders(mapped);
-        await setMeta(`lastOrdersSync_${rid}`, Date.now());
-        await loadFromIdb(rid);
+        await setMeta(`lastOrdersSync_${resolvedRid}`, Date.now());
+        await loadFromIdb(resolvedRid);
       }
     } catch {
       // Ignore background refresh errors
@@ -225,9 +215,14 @@ export default function ActiveOrdersPage() {
       }, 30_000);
     }
 
-    // Also refresh outbox entries when they change
+    // Refresh outbox entries + re-sync from server when outbox changes.
+    // This ensures orders that finish syncing from outbox→Supabase appear
+    // in the main orders grid immediately (not just the Pending Sync section).
     const handleOutboxChanged = () => {
-      if (restaurantId) loadFromIdb(restaurantId).catch(console.warn);
+      const activeRid = restaurantId || localStorage.getItem("cached_restaurant_id");
+      if (!activeRid) return;
+      loadFromIdb(activeRid).catch(console.warn);
+      if (navigator.onLine) refreshFromServer(activeRid).catch(console.warn);
     };
     window.addEventListener("outbox-changed", handleOutboxChanged);
 
