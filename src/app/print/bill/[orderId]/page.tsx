@@ -398,7 +398,7 @@ export default async function FinalBillPage({
             fontSize: "10px",
             fontWeight: "bold",
             color: "#000",
-            marginBottom: "10px",
+            marginBottom: "20px",
           }}
         >
           <div>Developed by: Axor Solution | Contact No: +923422352913</div>
@@ -408,7 +408,7 @@ export default async function FinalBillPage({
         </div>
 
         {/* ── 10. THERMAL PAPER CUT FEED (Generous spacing to feed paper past hardware cutter blade) ── */}
-        <div style={{ height: "35mm" }} />
+        <div style={{ height: "50mm" }} />
       </div>
     </>
   );

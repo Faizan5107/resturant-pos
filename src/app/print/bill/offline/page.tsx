@@ -322,13 +322,13 @@ function OfflineBillSlipContent() {
             fontSize: "10px",
             fontWeight: "bold",
             color: "#000",
-            marginBottom: "10px",
+            marginBottom: "20px",
           }}
         >
           <div>Developed by: Axor Solution | Contact No: +923422352913</div>
         </div>
 
-        <div style={{ height: "35mm" }} />
+        <div style={{ height: "50mm" }} />
       </div>
     </>
   );
