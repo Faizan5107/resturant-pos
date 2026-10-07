@@ -53,10 +53,10 @@ function OfflineBillSlipContent() {
     orderType === "dine_in"
       ? "Dine-In"
       : orderType === "takeaway"
-      ? "Takeaway"
-      : orderType === "delivery"
-      ? "Delivery"
-      : orderType;
+        ? "Takeaway"
+        : orderType === "delivery"
+          ? "Delivery"
+          : orderType;
 
   return (
     <>
@@ -322,13 +322,13 @@ function OfflineBillSlipContent() {
             fontSize: "10px",
             fontWeight: "bold",
             color: "#000",
-            marginBottom: "20px",
+            marginBottom: "30px",
           }}
         >
           <div>Developed by: Axor Solution | Contact No: +923422352913</div>
         </div>
 
-        <div style={{ height: "50mm" }} />
+        <div style={{ height: "80mm" }} />
       </div>
     </>
   );
