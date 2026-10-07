@@ -22,7 +22,7 @@ import {
 import { getOutbox } from "@/lib/offline/outbox";
 import { OutboxEntry } from "@/lib/offline/idb";
 import { configureSyncFunctions, startSyncManager } from "@/lib/offline/sync-manager";
-import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchOrdersAction } from "@/app/cashier/actions";
+import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchOrdersAction, fetchCashierBootstrapAction } from "@/app/cashier/actions";
 import ActiveOrdersBoard from "./ActiveOrdersBoard";
 
 interface Product {
@@ -140,30 +140,21 @@ export default function ActiveOrdersPage() {
 
       if (cancelled) return;
 
-      // 2. Perform online auth check in background
+      // 2. Perform online auth check + profile fetch via server action
       if (navigator.onLine) {
         try {
-          const supabase = createClient();
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("restaurant_id, role")
-              .eq("id", user.id)
-              .single();
+          const bootstrap = await fetchCashierBootstrapAction();
+          if (bootstrap.restaurantId) {
+            const newRid = bootstrap.restaurantId;
+            const newRole = bootstrap.role || "";
+            localStorage.setItem("cached_restaurant_id", newRid);
+            if (newRole) localStorage.setItem("cached_role", newRole);
 
-            if (profile?.restaurant_id) {
-              const newRid = profile.restaurant_id;
-              const newRole = profile.role;
-              localStorage.setItem("cached_restaurant_id", newRid);
-              if (newRole) localStorage.setItem("cached_role", newRole);
-
-              if (newRid !== rid) {
-                rid = newRid;
-                setRestaurantId(newRid);
-                setIsAdmin(newRole === "admin" || newRole === "super_admin");
-                await loadFromIdb(newRid);
-              }
+            if (newRid !== rid) {
+              rid = newRid;
+              setRestaurantId(newRid);
+              setIsAdmin(newRole === "admin" || newRole === "super_admin");
+              await loadFromIdb(newRid);
             }
           }
         } catch {
@@ -178,25 +169,14 @@ export default function ActiveOrdersPage() {
 
       const activeRid = rid;
 
-      // 3. Fetch products & refresh orders from server in background if online
+      // 3. Use the bootstrap data (already fetched above) for products & currency,
+      //    then refresh orders from server in background if online
       if (navigator.onLine) {
         try {
-          const supabase = createClient();
-          const [prodRes, settingsRes] = await Promise.all([
-            supabase
-              .from("products")
-              .select("id, code, name, status, product_variants(id, name, sale_price)")
-              .neq("status", "hidden")
-              .order("name"),
-            supabase
-              .from("restaurant_settings")
-              .select("currency")
-              .eq("restaurant_id", activeRid)
-              .single(),
-          ]);
+          const bootstrap = await fetchCashierBootstrapAction();
           if (!cancelled) {
-            setProducts((prodRes.data as any) || []);
-            setCurrency(settingsRes.data?.currency || "PKR");
+            setProducts(bootstrap.products || []);
+            setCurrency(bootstrap.currency || "PKR");
           }
         } catch {
           // Ignore settings/product fetch errors

@@ -208,7 +208,60 @@ export async function fetchOrdersAction(): Promise<{
   }
 }
 
+/**
+ * Fetches auth profile, products, and restaurant settings in one server-side round-trip.
+ * Replaces the two createClient() calls in active-orders/page.tsx so the client
+ * doesn't need NEXT_PUBLIC_ env vars to work.
+ */
+export async function fetchCashierBootstrapAction(): Promise<{
+  restaurantId?: string;
+  role?: string;
+  currency?: string;
+  products?: Array<{
+    id: string; code: string; name: string; status: string;
+    product_variants: Array<{ id: string; name: string; sale_price: number }>;
+  }>;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthenticated" };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("restaurant_id, role")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.restaurant_id) return { error: "Restaurant not found" };
+
+    const [prodRes, settingsRes] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, code, name, status, product_variants(id, name, sale_price)")
+        .neq("status", "hidden")
+        .order("name"),
+      supabase
+        .from("restaurant_settings")
+        .select("currency")
+        .eq("restaurant_id", profile.restaurant_id)
+        .single(),
+    ]);
+
+    return {
+      restaurantId: profile.restaurant_id,
+      role: profile.role,
+      currency: settingsRes.data?.currency || "PKR",
+      products: (prodRes.data as any) || [],
+    };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Bootstrap failed" };
+  }
+}
+
 export async function cancelOrderAction(orderId: string, reason: string) {
+
 
   const supabase = await createClient();
 
