@@ -116,9 +116,11 @@ export default async function FinalBillPage({
             overflow: visible !important;
           }
           .receipt-container {
-            width: 80mm !important;
+            width: 100% !important;
             margin: 0 !important;
-            padding-bottom: 35mm !important;
+            padding-left: 2mm !important;
+            padding-right: 2mm !important;
+            padding-bottom: 80mm !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
           }

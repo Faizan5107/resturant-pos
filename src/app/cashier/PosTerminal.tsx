@@ -301,7 +301,7 @@ export default function PosTerminal({
         });
         const url = `/print/kitchen/offline?${slipParams.toString()}`;
         setOfflinePrintUrl(url);
-        try { window.open(url, "_blank", "width=400,height=600"); } catch {}
+        try { window.open(url, "_blank", "width=302,height=600"); } catch {}
         setSuccessNotice(`Order ${tempOrderNo} saved offline. Will sync when online.`);
         return;
       }
@@ -333,14 +333,14 @@ export default function PosTerminal({
           });
           const url = `/print/kitchen/offline?${slipParams.toString()}`;
           setOfflinePrintUrl(url);
-          try { window.open(url, "_blank", "width=400,height=600"); } catch {}
+          try { window.open(url, "_blank", "width=302,height=600"); } catch {}
           setSuccessNotice(`Supabase unreachable. Order ${tempOrderNo} saved offline.`);
         } else {
           setError(res.error);
         }
       } else if (res.result?.order_id) {
         clearForm();
-        try { window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=400,height=600"); } catch {}
+        try { window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=302,height=600"); } catch {}
         // Delay navigation so the browser doesn't block the popup window before it opens
         setTimeout(() => router.push("/cashier/active-orders"), 300);
       }
@@ -364,7 +364,7 @@ export default function PosTerminal({
       });
       const url = `/print/kitchen/offline?${slipParams.toString()}`;
       setOfflinePrintUrl(url);
-      try { window.open(url, "_blank", "width=400,height=600"); } catch {}
+      try { window.open(url, "_blank", "width=302,height=600"); } catch {}
       setSuccessNotice(`Connection error. Order ${tempOrderNo} saved offline.`);
     }
   };
@@ -828,7 +828,7 @@ export default function PosTerminal({
                 {offlinePrintUrl && (
                   <button
                     type="button"
-                    onClick={() => window.open(offlinePrintUrl, "_blank", "width=400,height=600")}
+                    onClick={() => window.open(offlinePrintUrl, "_blank", "width=302,height=600")}
                     className="w-full py-2 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5"
                   >
                     🖨️ Print Kitchen Slip
