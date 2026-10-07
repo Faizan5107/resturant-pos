@@ -115,9 +115,9 @@ export default function ActiveOrdersBoard({
           }))
         ),
       });
-      window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=302,height=600");
+      window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=420,height=600");
     } else {
-      window.open(`/print/kitchen/${order.id}`, "_blank", "width=302,height=600");
+      window.open(`/print/kitchen/${order.id}`, "_blank", "width=420,height=600");
     }
   };
 
@@ -146,9 +146,9 @@ export default function ActiveOrdersBoard({
         currency,
         ...(isReprint ? { reprint: "true" } : {}),
       });
-      window.open(`/print/bill/offline?${slipParams.toString()}`, "_blank", "width=302,height=600");
+      window.open(`/print/bill/offline?${slipParams.toString()}`, "_blank", "width=420,height=600");
     } else {
-      window.open(`/print/bill/${order.id}${isReprint ? "?reprint=true" : ""}`, "_blank", "width=302,height=600");
+      window.open(`/print/bill/${order.id}${isReprint ? "?reprint=true" : ""}`, "_blank", "width=420,height=600");
     }
   };
 
