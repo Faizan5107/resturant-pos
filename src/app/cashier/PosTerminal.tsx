@@ -341,7 +341,8 @@ export default function PosTerminal({
       } else if (res.result?.order_id) {
         clearForm();
         try { window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=400,height=600"); } catch {}
-        router.push("/cashier/active-orders");
+        // Delay navigation so the browser doesn't block the popup window before it opens
+        setTimeout(() => router.push("/cashier/active-orders"), 300);
       }
     } catch {
       const { clientUuid, tempOrderNo } = await addOrderToOutbox(
