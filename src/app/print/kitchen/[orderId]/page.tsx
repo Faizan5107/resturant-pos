@@ -96,6 +96,7 @@ export default async function KitchenSlipPage({
           }
           .receipt-container {
             width: 80mm !important;
+            margin: 0 !important;
             padding-bottom: 25mm !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;

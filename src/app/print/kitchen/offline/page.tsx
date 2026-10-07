@@ -60,8 +60,8 @@ function OfflineKitchenSlipContent() {
         }
         @page { margin: 0; size: 80mm auto; }
         @media print {
-          html, body { width: 80mm !important; }
-          .receipt-container { width: 80mm !important; padding-bottom: 25mm !important; }
+          html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
+          .receipt-container { width: 80mm !important; margin: 0 !important; padding-bottom: 25mm !important; }
         }
       `}</style>
 
