@@ -113,7 +113,7 @@ export default async function KitchenSlipPage({
           background: "#fff",
           color: "#000",
           width: "80mm",
-          margin: "0 auto",
+          margin: "0",
           padding: "5mm 3mm 25mm 3mm",
           fontSize: "11px",
           lineHeight: "1.4",

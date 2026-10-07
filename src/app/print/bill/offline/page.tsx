@@ -82,6 +82,7 @@ function OfflineBillSlipContent() {
           }
           .receipt-container {
             width: 80mm !important;
+            margin: 0 !important;
             padding-bottom: 35mm !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
@@ -99,7 +100,7 @@ function OfflineBillSlipContent() {
           background: "#fff",
           color: "#000",
           width: "80mm",
-          margin: "0 auto",
+          margin: "0",
           padding: "0 3mm 35mm 3mm",
           fontSize: "11px",
           lineHeight: "1.4",
