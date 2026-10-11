@@ -152,9 +152,6 @@ function OfflineBillSlipContent() {
             </div>
           )}
 
-          <div style={{ fontSize: "10px", marginTop: "2px", fontStyle: "italic" }}>
-            [OFFLINE RECEIPT]
-          </div>
           {isReprint && (
             <div
               style={{
@@ -186,7 +183,7 @@ function OfflineBillSlipContent() {
             marginBottom: "4px",
           }}
         >
-          <span>Order No: {orderNo}</span>
+          <span>Order No: {parseInt(orderNo, 10) || orderNo}</span>
           <span>{timeStr}</span>
         </div>
 

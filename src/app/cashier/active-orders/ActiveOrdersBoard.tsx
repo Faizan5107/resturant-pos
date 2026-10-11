@@ -274,7 +274,7 @@ export default function ActiveOrdersBoard({
                 return (
                   <div key={entry.clientUuid} className="border border-black border-dashed rounded-lg p-4 bg-white flex flex-col space-y-2 opacity-80">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm">{entry.tempOrderNo}</span>
+                      <span className="font-bold text-sm">#{parseInt(entry.tempOrderNo || "", 10) || entry.tempOrderNo || ""}</span>
                       <span className="border border-black text-black text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
                         {entry.status === "needs_attention" ? "⚠ Needs Attention" : "Pending Sync"}
                       </span>
@@ -403,7 +403,7 @@ export default function ActiveOrdersBoard({
                   <div className="flex justify-between items-start border-b border-zinc-200 pb-2">
                     <div>
                       <span className={`font-bold text-lg ${isCancelled ? "text-red-900 line-through" : "text-black"}`}>
-                        #{order.order_no}
+                        #{parseInt(order.order_no, 10) || order.order_no}
                       </span>
                       <p className="text-[10px] uppercase font-semibold text-zinc-500">
                         {order.order_type} {order.table_no ? `• Table ${order.table_no}` : ""}

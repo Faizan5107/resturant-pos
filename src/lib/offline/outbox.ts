@@ -18,44 +18,69 @@ import {
   updateOutboxEntry,
   getMeta,
   setMeta,
+  getOrdersByRestaurant,
 } from "./idb";
 import { getOrderDateString } from "@/lib/dates";
 
-// ─── Device code ─────────────────────────────────────────────────────────────
+// ─── Daily order counter ─────────────────────────────────────────────────────
 
-const DEVICE_ID_KEY = "pos_device_id";
-
-function getDeviceCode(): string {
-  if (typeof window === "undefined") return "X";
-  let id = localStorage.getItem(DEVICE_ID_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(DEVICE_ID_KEY, id);
+/** Updates the known daily order counter to at least the given number. */
+export async function updateDailyOrderCounter(restaurantId: string, orderNo: number | string): Promise<void> {
+  const num = typeof orderNo === "number" ? orderNo : parseInt(orderNo, 10);
+  if (isNaN(num) || num <= 0) return;
+  const today = getOrderDateString();
+  const counterKey = `daily_order_counter_${restaurantId}_${today}`;
+  const current = (await getMeta<number>(counterKey)) ?? 0;
+  if (num > current) {
+    await setMeta(counterKey, num);
   }
-  // Map UUID to a letter A–Z using first hex nibble
-  const nibble = parseInt(id[0], 16); // 0-15
-  return String.fromCharCode(65 + (nibble % 26)); // A-Z
 }
 
-// ─── Temp order counter ───────────────────────────────────────────────────────
-
-/** Returns the next temp order number for today on this device. */
-async function nextTempOrderNo(restaurantId: string): Promise<string> {
+/** Returns the next sequential order number for today on this device. */
+export async function nextTempOrderNo(restaurantId: string): Promise<string> {
   const today = getOrderDateString(); // YYYY-MM-DD shift date
-  const counterKey = `outbox_counter_${restaurantId}_${today}`;
+  const counterKey = `daily_order_counter_${restaurantId}_${today}`;
 
-  const current = (await getMeta<number>(counterKey)) ?? 0;
+  let current = (await getMeta<number>(counterKey)) ?? 0;
+
+  // If counter is not set yet, check cached orders in IDB for today
+  if (current === 0) {
+    try {
+      const localOrders = await getOrdersByRestaurant(restaurantId);
+      for (const ord of localOrders) {
+        const n = parseInt(ord.order_no, 10);
+        if (!isNaN(n) && n > current) {
+          current = n;
+        }
+      }
+    } catch {}
+  }
+
+  // Also check existing outbox entries for this restaurant
+  try {
+    const entries = await getOutboxEntries(restaurantId);
+    for (const entry of entries) {
+      if (entry.tempOrderNo) {
+        const n = parseInt(entry.tempOrderNo, 10);
+        if (!isNaN(n) && n > current) {
+          current = n;
+        }
+      }
+    }
+  } catch {}
+
   const next = current + 1;
   await setMeta(counterKey, next);
 
-  const deviceCode = getDeviceCode();
-  return `L-${deviceCode}-${String(next).padStart(3, "0")}`;
+  // Return standard 4-digit formatted order number (e.g. "0001", "0015")
+  return String(next).padStart(4, "0");
 }
 
 // ─── Save to outbox ───────────────────────────────────────────────────────────
 
 interface PlaceOrderPayload {
   order_type: "dine_in" | "takeaway" | "delivery";
+  order_no?: string;
   table_no?: string;
   customer_name?: string;
   customer_phone?: string;
@@ -89,11 +114,17 @@ export async function addOrderToOutbox(
   const tempOrderNo = await nextTempOrderNo(restaurantId);
   const now = new Date().toISOString();
 
+  // Attach order_no to payload so sync will preserve the exact order number!
+  const payloadWithOrderNo: PlaceOrderPayload = {
+    ...payload,
+    order_no: tempOrderNo,
+  };
+
   const entry: OutboxEntry = {
     clientUuid,
     restaurant_id: restaurantId,
     type: "place_order",
-    payload,
+    payload: payloadWithOrderNo,
     tempOrderNo,
     cachedTotal,
     status: "pending",

@@ -125,9 +125,6 @@ function OfflineKitchenSlipContent() {
           <div style={{ fontWeight: "bold", fontSize: "15px", letterSpacing: "1px", marginTop: "4px" }}>
             *** KITCHEN SLIP ***
           </div>
-          <div style={{ fontSize: "10px", marginTop: "2px", fontStyle: "italic" }}>
-            [OFFLINE — Temp Slip]
-          </div>
         </div>
 
         <div style={{ borderBottom: "1px solid #000", margin: "4px 0" }} />
@@ -135,7 +132,7 @@ function OfflineKitchenSlipContent() {
         {/* Order meta */}
         <div style={{ fontSize: "12px", fontWeight: "bold", marginBottom: "6px" }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span>Order No: {orderNo}</span>
+            <span>Order No: {parseInt(orderNo, 10) || orderNo}</span>
             {orderType === "dine_in" && tableNo && (
               <span>TABLE #: {tableNo}</span>
             )}

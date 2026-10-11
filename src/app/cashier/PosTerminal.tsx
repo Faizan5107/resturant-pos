@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
 import { placeOrderAction } from "./actions";
 import { useOffline } from "@/lib/offline/useOffline";
-import { addOrderToOutbox } from "@/lib/offline/outbox";
+import { addOrderToOutbox, updateDailyOrderCounter } from "@/lib/offline/outbox";
 import { saveOfflineDraft, OfflineDraftRow } from "@/lib/offline/sqlite-db";
 import {
   printOfflineKitchenSlip,
@@ -400,6 +400,9 @@ export default function PosTerminal({
           setError(res.error);
         }
       } else if (res.result?.order_id) {
+        if (res.result.order_no) {
+          updateDailyOrderCounter(restaurantId || "unknown", res.result.order_no).catch(() => {});
+        }
         clearForm();
         try { window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=420,height=600"); } catch {}
         // Delay navigation so the browser doesn't block the popup window before it opens
@@ -533,8 +536,10 @@ export default function PosTerminal({
       {reconciledNotice && (
         <div className="border border-black bg-white rounded p-2.5 flex items-center justify-between text-xs">
           <span className="text-black">
-            ℹ Order synced: temp <strong>{reconciledNotice.tempOrderNo}</strong> →
-            real <strong>{reconciledNotice.serverOrderNo}</strong>
+            ✓ Order synced: <strong>#{parseInt(reconciledNotice.serverOrderNo, 10) || reconciledNotice.serverOrderNo}</strong>
+            {reconciledNotice.tempOrderNo !== reconciledNotice.serverOrderNo && (
+              <> (assigned from offline #{parseInt(reconciledNotice.tempOrderNo, 10) || reconciledNotice.tempOrderNo})</>
+            )}
             {Math.abs(reconciledNotice.serverTotal - reconciledNotice.cachedTotal) > 0.01 && (
               <> · Total updated to <strong>{formatMoney(reconciledNotice.serverTotal, currency)}</strong></>
             )}

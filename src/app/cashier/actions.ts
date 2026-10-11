@@ -7,6 +7,7 @@ import { getOrderDateString } from "@/lib/dates";
 export async function placeOrderAction(
   payload: {
     order_type: "dine_in" | "takeaway" | "delivery";
+    order_no?: string;
     table_no?: string;
     customer_name?: string;
     customer_phone?: string;
@@ -60,11 +61,53 @@ export async function placeOrderAction(
     // Fetch current order details
     const { data: ord } = await adminClient
       .from("orders")
-      .select("subtotal, tax_amount, order_type, restaurant_id")
+      .select("subtotal, tax_amount, order_type, restaurant_id, order_no")
       .eq("id", data.order_id)
       .single();
 
     if (ord) {
+      const bizOrderDate = getOrderDateString();
+      let finalOrderNo = ord.order_no;
+
+      // If client supplied an offline order_no, preserve it if no collision exists
+      const desiredOrderNo = payload.order_no ? String(payload.order_no).padStart(4, "0") : null;
+      if (desiredOrderNo && desiredOrderNo !== ord.order_no) {
+        const { data: existing } = await adminClient
+          .from("orders")
+          .select("id")
+          .eq("restaurant_id", ord.restaurant_id)
+          .eq("order_date", bizOrderDate)
+          .eq("order_no", desiredOrderNo)
+          .neq("id", data.order_id)
+          .maybeSingle();
+
+        if (!existing) {
+          finalOrderNo = desiredOrderNo;
+
+          // Advance order_counters so subsequent orders continue after this number
+          const num = parseInt(desiredOrderNo, 10);
+          if (!isNaN(num)) {
+            const { data: counter } = await adminClient
+              .from("order_counters")
+              .select("last_no")
+              .eq("restaurant_id", ord.restaurant_id)
+              .eq("order_date", bizOrderDate)
+              .maybeSingle();
+
+            const curLast = counter?.last_no || 0;
+            if (num > curLast) {
+              await adminClient
+                .from("order_counters")
+                .upsert({
+                  restaurant_id: ord.restaurant_id,
+                  order_date: bizOrderDate,
+                  last_no: num,
+                });
+            }
+          }
+        }
+      }
+
       // Fetch restaurant settings specifically for this restaurant
       const { data: settings } = await adminClient
         .from("restaurant_settings")
@@ -83,10 +126,10 @@ export async function placeOrderAction(
 
       const newTotal = subtotal + taxAmount + deliveryFee + serviceFee;
 
-      const bizOrderDate = getOrderDateString();
       await adminClient
         .from("orders")
         .update({
+          order_no: finalOrderNo,
           order_date: bizOrderDate,
           delivery_fee: deliveryFee,
           service_fee: serviceFee,
@@ -94,6 +137,7 @@ export async function placeOrderAction(
         })
         .eq("id", data.order_id);
 
+      data.order_no = finalOrderNo;
       data.total = newTotal;
     }
   }

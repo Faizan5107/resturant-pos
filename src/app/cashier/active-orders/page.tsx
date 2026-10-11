@@ -21,7 +21,7 @@ import {
   setMeta,
   OrderEntry,
 } from "@/lib/offline/idb";
-import { getOutbox } from "@/lib/offline/outbox";
+import { getOutbox, updateDailyOrderCounter } from "@/lib/offline/outbox";
 import { OutboxEntry } from "@/lib/offline/idb";
 import { configureSyncFunctions, startSyncManager } from "@/lib/offline/sync-manager";
 import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchOrdersAction, fetchCashierBootstrapAction } from "@/app/cashier/actions";
@@ -101,6 +101,12 @@ export default function ActiveOrdersPage() {
         }));
         await syncOrdersForRestaurant(resolvedRid, mapped);
         await setMeta(`lastOrdersSync_${resolvedRid}`, Date.now());
+
+        // Update daily order counter with max order_no from server
+        for (const o of res.orders) {
+          if (o.order_no) updateDailyOrderCounter(resolvedRid, o.order_no).catch(() => {});
+        }
+
         await loadFromIdb(resolvedRid);
       }
     } catch {

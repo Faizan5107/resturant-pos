@@ -156,16 +156,13 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
       <div style="font-weight:bold;font-size:15px;letter-spacing:1px;margin-top:4px;">
         *** KITCHEN SLIP ***
       </div>
-      <div style="font-size:10px;margin-top:2px;font-style:italic;">
-        [OFFLINE — Temp Slip]
-      </div>
     </div>
 
     <div style="border-bottom:1px solid #000;margin:4px 0;"></div>
 
     <div style="font-size:12px;font-weight:bold;margin-bottom:6px;">
       <div style="display:flex;justify-content:space-between;">
-        <span>Order No: ${escapeHtml(orderNo)}</span>
+        <span>Order No: ${escapeHtml(String(parseInt(orderNo, 10) || orderNo))}</span>
         ${orderType === "dine_in" && tableNo ? `<span>TABLE #: ${escapeHtml(tableNo)}</span>` : ""}
       </div>
       <div style="font-size:10px;margin-top:2px;">
@@ -351,9 +348,6 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
       ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
-      <div style="font-size:10px;margin-top:2px;font-style:italic;">
-        [OFFLINE RECEIPT]
-      </div>
       ${
         isReprint
           ? `<div style="font-weight:bold;font-size:15px;letter-spacing:1px;border:2px solid #000;text-align:center;padding:2px 0;margin-top:6px;margin-bottom:2px;text-transform:uppercase;">*** REPRINT ***</div>`
@@ -362,7 +356,7 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
     </div>
 
     <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:bold;border-top:1px solid #000;padding:3px 0;margin-bottom:4px;">
-      <span>Order No: ${escapeHtml(orderNo)}</span>
+      <span>Order No: ${escapeHtml(String(parseInt(orderNo, 10) || orderNo))}</span>
       <span>${timeStr}</span>
     </div>
 
