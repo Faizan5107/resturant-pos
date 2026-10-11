@@ -60,6 +60,8 @@ export default function NewOrderPage() {
   const [data, setData] = useState<PageData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
   const [cachedBranding, setCachedBranding] = useState({ name: "", slug: "", logo_url: "", slogan: "" });
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   // Read localStorage branding on client mount (SSR-safe fallback)
   useEffect(() => {
@@ -126,7 +128,7 @@ export default function NewOrderPage() {
   // ── 2. Fetch from Supabase + refresh IDB in background ──────────────────
   const refreshFromServer = useCallback(async (restaurantId: string) => {
     if (!navigator.onLine) return;
-
+    setSyncing(true);
     const supabase = createClient();
     try {
       const [catsRes, prodsRes, addonsRes, settingsRes, restRes] = await Promise.all([
@@ -178,10 +180,13 @@ export default function NewOrderPage() {
       });
 
       await setMeta(`lastMenuSync_${restaurantId}`, Date.now());
+      setLastSyncTime(Date.now());
+      setSyncing(false);
 
       // Re-render from IDB with fresh data
       await loadFromIdb(restaurantId);
     } catch {
+      setSyncing(false);
       // Ignore background refresh errors (we already have IDB data)
     }
   }, [loadFromIdb]);
@@ -244,6 +249,10 @@ export default function NewOrderPage() {
       await loadFromIdb(restaurantId);
       if (cancelled) return;
 
+      // Read last sync time for UI
+      const lastSync = await getMeta(`lastMenuSync_${restaurantId}`);
+      if (lastSync) setLastSyncTime(lastSync as number);
+
       // Then refresh from server in background
       refreshFromServer(restaurantId).catch(console.warn);
     }
@@ -269,20 +278,74 @@ export default function NewOrderPage() {
 
   const { categories, products, addons, settings, restaurantId } = data;
 
+  // If offline and no menu cached yet, show a friendly error
+  const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+  const hasMenuCache = products.length > 0;
+
+  if (isOffline && !hasMenuCache) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-100px)] p-6">
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="text-4xl">📵</div>
+          <h2 className="text-base font-bold text-black">Menu Not Available Offline</h2>
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            The menu has not been cached yet. Please connect to the internet and visit
+            this page once while online — the full menu will be saved automatically
+            for offline use.
+          </p>
+          <div className="p-3 bg-zinc-50 border border-zinc-200 rounded text-xs text-zinc-600 text-left">
+            <p className="font-semibold mb-1">How to enable offline mode:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Connect to internet</li>
+              <li>Open New Order page</li>
+              <li>Wait for menu to load</li>
+              <li>You can now use it offline ✓</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const syncLabel = lastSyncTime
+    ? `Menu synced ${new Date(lastSyncTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : syncing ? "Syncing menu…" : "Menu not synced yet";
+
   return (
-    <PosTerminal
-      categories={categories}
-      products={products}
-      addons={addons}
-      currency={settings?.currency || "PKR"}
-      taxRate={settings?.tax_rate || 0}
-      enableServiceFee={settings?.enable_service_fee || false}
-      serviceFeeAmount={settings?.service_fee_amount || 0}
-      restaurantId={restaurantId || ""}
-      restaurantName={settings?.name || cachedBranding.name}
-      restaurantSlug={settings?.slug || cachedBranding.slug}
-      logoUrl={settings?.logo_url || cachedBranding.logo_url}
-      slogan={settings?.slogan || cachedBranding.slogan}
-    />
+    <div className="relative">
+      {/* Offline cache status badge */}
+      <div className="absolute top-2 right-3 z-10 flex items-center gap-1.5">
+        {syncing && (
+          <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+            <span className="w-2 h-2 border border-zinc-400 border-t-transparent rounded-full animate-spin inline-block" />
+            Syncing menu…
+          </span>
+        )}
+        {!syncing && lastSyncTime && (
+          <span className="text-[10px] text-zinc-400" title={syncLabel}>
+            💾 {syncLabel}
+          </span>
+        )}
+        {!syncing && !lastSyncTime && (
+          <span className="text-[10px] text-amber-600 font-semibold" title="Visit while online to cache menu for offline use">
+            ⚠ Menu not cached
+          </span>
+        )}
+      </div>
+      <PosTerminal
+        categories={categories}
+        products={products}
+        addons={addons}
+        currency={settings?.currency || "PKR"}
+        taxRate={settings?.tax_rate || 0}
+        enableServiceFee={settings?.enable_service_fee || false}
+        serviceFeeAmount={settings?.service_fee_amount || 0}
+        restaurantId={restaurantId || ""}
+        restaurantName={settings?.name || cachedBranding.name}
+        restaurantSlug={settings?.slug || cachedBranding.slug}
+        logoUrl={settings?.logo_url || cachedBranding.logo_url}
+        slogan={settings?.slogan || cachedBranding.slogan}
+      />
+    </div>
   );
 }
