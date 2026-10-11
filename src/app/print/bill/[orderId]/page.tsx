@@ -176,11 +176,6 @@ export default async function FinalBillPage({
               {restaurantName}
             </div>
           )}
-          {restaurantSlug && (
-            <div style={{ fontSize: "11px", fontWeight: "bold", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase", marginTop: "2px" }}>
-              SLUG: {restaurantSlug}
-            </div>
-          )}
           {slogan && (
             <div style={{ fontSize: "13px", fontWeight: "bold", marginTop: "3px" }}>
               {slogan}

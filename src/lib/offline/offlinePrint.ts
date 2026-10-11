@@ -152,7 +152,6 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
   <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:5mm 3mm 25mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
-      ${restaurantSlug ? `<div style="font-size:11px;font-weight:bold;font-family:monospace;letter-spacing:1px;text-transform:uppercase;margin:2px 0 3px;">SLUG: ${escapeHtml(restaurantSlug)}</div>` : ""}
       ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
       <div style="font-weight:bold;font-size:15px;letter-spacing:1px;margin-top:4px;">
         *** KITCHEN SLIP ***
@@ -351,7 +350,6 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
   <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:0 3mm 35mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
-      ${restaurantSlug ? `<div style="font-size:11px;font-weight:bold;font-family:monospace;letter-spacing:1px;text-transform:uppercase;margin:2px 0 3px;">SLUG: ${escapeHtml(restaurantSlug)}</div>` : ""}
       ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
       <div style="font-size:10px;margin-top:2px;font-style:italic;">
         [OFFLINE RECEIPT]

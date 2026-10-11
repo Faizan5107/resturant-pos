@@ -116,12 +116,6 @@ function OfflineKitchenSlipContent() {
             {restaurantName || "RESTAURANT"}
           </div>
 
-          {slug && (
-            <div style={{ fontSize: "11px", fontWeight: "bold", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase", margin: "2px 0 3px" }}>
-              SLUG: {slug}
-            </div>
-          )}
-
           {slogan && (
             <div style={{ fontSize: "12px", fontWeight: "bold", fontStyle: "italic", marginTop: "2px" }}>
               {slogan}
