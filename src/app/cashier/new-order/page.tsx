@@ -59,6 +59,17 @@ const EMPTY_DATA: PageData = {
 export default function NewOrderPage() {
   const [data, setData] = useState<PageData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
+  const [cachedBranding, setCachedBranding] = useState({ name: "", slug: "", logo_url: "", slogan: "" });
+
+  // Read localStorage branding on client mount (SSR-safe fallback)
+  useEffect(() => {
+    setCachedBranding({
+      name: localStorage.getItem("cached_restaurant_name") || "",
+      slug: localStorage.getItem("cached_restaurant_slug") || "",
+      logo_url: localStorage.getItem("cached_restaurant_logo") || "",
+      slogan: localStorage.getItem("cached_restaurant_slogan") || "",
+    });
+  }, []);
 
   // ── 1. Load from IDB on mount ────────────────────────────────────────────
   const loadFromIdb = useCallback(async (restaurantId: string) => {
@@ -268,10 +279,10 @@ export default function NewOrderPage() {
       enableServiceFee={settings?.enable_service_fee || false}
       serviceFeeAmount={settings?.service_fee_amount || 0}
       restaurantId={restaurantId || ""}
-      restaurantName={settings?.name || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_name") || "" : "")}
-      restaurantSlug={settings?.slug || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slug") || "" : "")}
-      logoUrl={settings?.logo_url || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_logo") || "" : "")}
-      slogan={settings?.slogan || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slogan") || "" : "")}
+      restaurantName={settings?.name || cachedBranding.name}
+      restaurantSlug={settings?.slug || cachedBranding.slug}
+      logoUrl={settings?.logo_url || cachedBranding.logo_url}
+      slogan={settings?.slogan || cachedBranding.slogan}
     />
   );
 }

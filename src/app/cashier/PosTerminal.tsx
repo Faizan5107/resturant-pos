@@ -874,16 +874,14 @@ export default function PosTerminal({
             {successNotice && (
               <div className="p-3 border border-black bg-white text-black text-xs rounded font-medium space-y-2 shadow-sm">
                 <p>{successNotice}</p>
-                {(offlinePrintUrl || lastOfflineSlip || lastOfflineBillSlip) && (
+                {(lastOfflineSlip || lastOfflineBillSlip) && (
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (lastOfflineSlip) {
-                          printOfflineKitchenSlip(lastOfflineSlip);
-                        } else if (offlinePrintUrl) {
-                          window.open(offlinePrintUrl, "_blank", "width=420,height=600");
-                        }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (lastOfflineSlip) printOfflineKitchenSlip(lastOfflineSlip);
                       }}
                       className="py-2 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5"
                     >
@@ -891,10 +889,10 @@ export default function PosTerminal({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (lastOfflineBillSlip) {
-                          printOfflineBillSlip(lastOfflineBillSlip);
-                        }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (lastOfflineBillSlip) printOfflineBillSlip(lastOfflineBillSlip);
                       }}
                       className="py-2 border-2 border-black bg-white text-black text-xs font-bold rounded hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5"
                     >
@@ -902,6 +900,19 @@ export default function PosTerminal({
                     </button>
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSuccessNotice(null);
+                    setLastOfflineSlip(null);
+                    setLastOfflineBillSlip(null);
+                    setOfflinePrintUrl(null);
+                  }}
+                  className="w-full py-1.5 border border-zinc-300 text-zinc-600 text-xs font-semibold rounded hover:bg-zinc-50 transition-colors"
+                >
+                  ✕ New Order
+                </button>
               </div>
             )}
 
@@ -949,14 +960,17 @@ export default function PosTerminal({
               >
                 Hold (Draft)
               </button>
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={loading || cart.length === 0}
-                className="py-2.5 px-3 bg-black hover:bg-zinc-800 text-white rounded-md text-xs font-bold transition-colors disabled:opacity-50"
-              >
-                {loading ? "Processing..." : "Place Order & Print"}
-              </button>
+              {/* Hide Place Order button while success notice is visible to prevent accidental double-order */}
+              {!successNotice && (
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  disabled={loading || cart.length === 0}
+                  className="py-2.5 px-3 bg-black hover:bg-zinc-800 text-white rounded-md text-xs font-bold transition-colors disabled:opacity-50"
+                >
+                  {loading ? "Processing..." : "Place Order & Print"}
+                </button>
+              )}
             </div>
           </div>
         </div>
