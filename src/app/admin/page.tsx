@@ -11,7 +11,7 @@ export default async function AdminDashboardPage() {
     .single();
 
   const restaurant = (profile?.restaurants as any);
-  // Shift 2:00 PM to 2:00 AM counts as a single day
+  // Shift 12:00 PM to 2:00 AM counts as a single day
   const today = getOrderDateString();
 
   const { data: pnl } = await supabase.rpc("get_profit_and_loss", {
@@ -38,7 +38,7 @@ export default async function AdminDashboardPage() {
           Dashboard
         </h1>
         <p className="text-xs text-zinc-500">
-          Welcome back, {profile?.full_name}. Overview for {restaurant?.name} today ({formatDate(today)}, Shift: 2:00 PM - 2:00 AM).
+          Welcome back, {profile?.full_name}. Overview for {restaurant?.name} today ({formatDate(today)}, Shift: 12:00 PM - 2:00 AM).
         </p>
       </div>
 

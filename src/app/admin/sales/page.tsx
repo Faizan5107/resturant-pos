@@ -36,7 +36,7 @@ export default async function AdminSalesPage() {
           Sales Reports
         </h1>
         <p className="text-xs text-zinc-500">
-          Only paid orders count towards sales. Tax collected is excluded from revenue. Day shift runs 2:00 PM to 2:00 AM.
+          Only paid orders count towards sales. Tax collected is excluded from revenue. Day shift runs 12:00 PM to 2:00 AM.
         </p>
       </div>
 

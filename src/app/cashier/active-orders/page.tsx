@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getOrdersByRestaurant,
   saveOrders,
+  syncOrdersForRestaurant,
   setMeta,
   OrderEntry,
 } from "@/lib/offline/idb";
@@ -85,7 +86,7 @@ export default function ActiveOrdersPage() {
           updated_at: o.updated_at,
           order_items: o.order_items || [],
         }));
-        await saveOrders(mapped);
+        await syncOrdersForRestaurant(resolvedRid, mapped);
         await setMeta(`lastOrdersSync_${resolvedRid}`, Date.now());
         await loadFromIdb(resolvedRid);
       }

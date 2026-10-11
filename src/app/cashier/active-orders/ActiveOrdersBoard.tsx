@@ -64,7 +64,7 @@ export default function ActiveOrdersBoard({
   isAdmin?: boolean;
 }) {
   const router = useRouter();
-  const currentBusinessDate = getOrderDateString(); // 2pm to 2am shift date
+  const currentBusinessDate = getOrderDateString(); // 12pm to 2am shift date
 
   const [activeTab, setActiveTab] = useState<string>("open");
   const [historyDateFilter, setHistoryDateFilter] = useState<string>(currentBusinessDate);
@@ -294,7 +294,7 @@ export default function ActiveOrdersBoard({
         <div className="border border-black p-12 rounded-lg bg-white text-center text-zinc-500 text-xs">
           {activeTab === "open"
             ? "No running orders right now."
-            : `No orders found for ${showAllDates ? "all dates" : formatDate(historyDateFilter)} (Shift 2:00 PM - 2:00 AM).`}
+            : `No orders found for ${showAllDates ? "all dates" : formatDate(historyDateFilter)} (Shift 12:00 PM - 2:00 AM).`}
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">

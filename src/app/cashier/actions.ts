@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getOrderDateString } from "@/lib/dates";
 
 export async function placeOrderAction(
   payload: {
@@ -82,9 +83,11 @@ export async function placeOrderAction(
 
       const newTotal = subtotal + taxAmount + deliveryFee + serviceFee;
 
+      const bizOrderDate = getOrderDateString();
       await adminClient
         .from("orders")
         .update({
+          order_date: bizOrderDate,
           delivery_fee: deliveryFee,
           service_fee: serviceFee,
           total: newTotal,
@@ -241,7 +244,8 @@ export async function fetchCashierBootstrapAction(): Promise<{
         .from("products")
         .select("id, code, name, status, product_variants(id, name, sale_price)")
         .neq("status", "hidden")
-        .order("name"),
+        .order("sort_order", { ascending: true })
+        .order("code", { ascending: true }),
       supabase
         .from("restaurant_settings")
         .select("currency")

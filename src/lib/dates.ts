@@ -1,7 +1,7 @@
 import { format, parseISO } from "date-fns";
 
 export const DEFAULT_TIMEZONE = "Asia/Karachi";
-export const BUSINESS_DAY_CUTOFF_HOUR = 14; // 2:00 PM cutoff
+export const BUSINESS_DAY_CUTOFF_HOUR = 12; // 12:00 PM cutoff
 
 /**
  * Formats a timestamp into human-readable date string (e.g. 29 Sep 2026).
@@ -35,8 +35,8 @@ export function formatDateTime(date: string | Date | null | undefined, formatStr
 
 /**
  * Returns the restaurant business date.
- * Restaurant hours are 2:00 PM (14:00) to 2:00 AM (counted as a single day).
- * Any time between 00:00 and 13:59 belongs to the previous calendar day's shift.
+ * Restaurant hours are 12:00 PM (12:00) to 2:00 AM (counted as a single day).
+ * Any time between 00:00 and 11:59 belongs to the previous calendar day's shift.
  */
 export function getBusinessDate(date: Date = new Date(), cutoffHour = BUSINESS_DAY_CUTOFF_HOUR): Date {
   const d = new Date(date);

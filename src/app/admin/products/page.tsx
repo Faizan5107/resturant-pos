@@ -26,7 +26,8 @@ export default async function AdminProductsPage() {
         variant_costs(cost_price)
       )
     `)
-    .order("created_at", { ascending: false });
+    .order("sort_order", { ascending: true })
+    .order("code", { ascending: true });
 
   return (
     <div className="space-y-6">

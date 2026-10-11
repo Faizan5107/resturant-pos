@@ -221,6 +221,36 @@ export async function saveOrders(orders: OrderEntry[]): Promise<void> {
   await tx.done;
 }
 
+export async function syncOrdersForRestaurant(
+  restaurantId: string,
+  orders: OrderEntry[]
+): Promise<void> {
+  const db = await getDb();
+  const tx = db.transaction(["orders", "outbox"], "readwrite");
+  const ordersStore = tx.objectStore("orders");
+  const outboxStore = tx.objectStore("outbox");
+
+  // Keep any outbox clientUuids so we don't accidentally delete pending offline orders
+  const outboxKeys = await outboxStore.getAllKeys();
+  const pendingUuids = new Set(outboxKeys as string[]);
+
+  // Get existing local orders for this restaurant
+  const existingOrders = await ordersStore.index("by_restaurant").getAll(restaurantId);
+  const serverOrderIds = new Set(orders.map((o) => o.id));
+
+  for (const localOrder of existingOrders) {
+    if (!serverOrderIds.has(localOrder.id) && !pendingUuids.has(localOrder.id)) {
+      await ordersStore.delete(localOrder.id);
+    }
+  }
+
+  for (const o of orders) {
+    await ordersStore.put(o);
+  }
+
+  await tx.done;
+}
+
 export async function getOrdersByRestaurant(restaurantId: string): Promise<OrderEntry[]> {
   const db = await getDb();
   return db.getAllFromIndex("orders", "by_restaurant", restaurantId);

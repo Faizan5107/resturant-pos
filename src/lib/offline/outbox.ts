@@ -19,6 +19,7 @@ import {
   getMeta,
   setMeta,
 } from "./idb";
+import { getOrderDateString } from "@/lib/dates";
 
 // ─── Device code ─────────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ function getDeviceCode(): string {
 
 /** Returns the next temp order number for today on this device. */
 async function nextTempOrderNo(restaurantId: string): Promise<string> {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const today = getOrderDateString(); // YYYY-MM-DD shift date
   const counterKey = `outbox_counter_${restaurantId}_${today}`;
 
   const current = (await getMeta<number>(counterKey)) ?? 0;

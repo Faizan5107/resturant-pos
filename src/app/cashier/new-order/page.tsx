@@ -33,11 +33,11 @@ import PosTerminal from "@/app/cashier/PosTerminal";
 
 // ─── Types matching PosTerminal props ─────────────────────────────────────────
 
-interface Category { id: string; name: string; }
+interface Category { id: string; name: string; sort_order?: number; }
 interface ProductVariant { id: string; name: string; sale_price: number; }
 interface Product {
   id: string; code: string; name: string; image_url: string | null;
-  category_id: string | null; status: string;
+  category_id: string | null; status: string; sort_order?: number;
   product_variants: ProductVariant[];
 }
 interface Addon { id?: string; name: string; price_delta: number; }
@@ -79,20 +79,29 @@ export default function NewOrderPage() {
       variantMap.get(productId)!.push({ id: vd.id, name: vd.name, sale_price: vd.sale_price });
     }
 
-    const products: Product[] = prods.map((p) => {
-      const pd = p.data as any;
-      return {
-        id: pd.id, code: pd.code, name: pd.name,
-        image_url: pd.image_url, category_id: pd.category_id,
-        status: pd.status,
-        product_variants: variantMap.get(pd.id) || [],
-      };
-    });
+    const products: Product[] = prods
+      .map((p) => {
+        const pd = p.data as any;
+        return {
+          id: pd.id, code: pd.code, name: pd.name,
+          image_url: pd.image_url, category_id: pd.category_id,
+          status: pd.status,
+          sort_order: pd.sort_order ?? 0,
+          product_variants: variantMap.get(pd.id) || [],
+        };
+      })
+      .sort((a, b) => {
+        const sDiff = (a.sort_order || 0) - (b.sort_order || 0);
+        if (sDiff !== 0) return sDiff;
+        return (a.code || "").localeCompare(b.code || "", undefined, { numeric: true });
+      });
 
-    const categories: Category[] = cats.map((c) => {
-      const cd = c.data as any;
-      return { id: cd.id, name: cd.name };
-    });
+    const categories: Category[] = cats
+      .map((c) => {
+        const cd = c.data as any;
+        return { id: cd.id, name: cd.name, sort_order: cd.sort_order ?? 999 };
+      })
+      .sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
 
     const addonList: Addon[] = addons.map((a) => {
       const ad = a.data as any;
@@ -108,14 +117,10 @@ export default function NewOrderPage() {
     if (!navigator.onLine) return;
 
     const supabase = createClient();
-    const FIVE_MIN = 5 * 60 * 1000;
-    const lastSync = await getMeta<number>(`lastMenuSync_${restaurantId}`);
-    if (lastSync && Date.now() - lastSync < FIVE_MIN) return; // recently synced
-
     try {
       const [catsRes, prodsRes, addonsRes, settingsRes] = await Promise.all([
         supabase.from("categories").select("id, name, sort_order").eq("is_active", true).order("sort_order"),
-        supabase.from("products").select("id, code, name, image_url, category_id, status").neq("status", "hidden").order("name"),
+        supabase.from("products").select("id, code, name, image_url, category_id, status, sort_order").neq("status", "hidden").order("sort_order").order("code"),
         supabase.from("addons").select("id, name, price_delta").order("name"),
         supabase.from("restaurant_settings")
           .select("currency, tax_rate, enable_service_fee, service_fee_amount")
