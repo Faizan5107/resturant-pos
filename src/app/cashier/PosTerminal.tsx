@@ -7,6 +7,7 @@ import { placeOrderAction } from "./actions";
 import { useOffline } from "@/lib/offline/useOffline";
 import { addOrderToOutbox } from "@/lib/offline/outbox";
 import { saveOfflineDraft, OfflineDraftRow } from "@/lib/offline/sqlite-db";
+import { printOfflineKitchenSlip, OfflineKitchenSlipData } from "@/lib/offline/offlinePrint";
 import DraftsModal from "./DraftsModal";
 
 interface Category {
@@ -92,6 +93,7 @@ export default function PosTerminal({
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [offlinePrintUrl, setOfflinePrintUrl] = useState<string | null>(null);
+  const [lastOfflineSlip, setLastOfflineSlip] = useState<OfflineKitchenSlipData | null>(null);
 
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
@@ -275,6 +277,45 @@ export default function PosTerminal({
       })),
     };
 
+    const triggerOfflinePrint = (
+      tempOrderNo: string,
+      clientUuid: string,
+      orderPayload: any,
+      cartItems: CartItem[]
+    ) => {
+      const slipItems = orderPayload.items.map((i: any) => ({
+        product_name: cartItems.find((c) => c.variant_id === i.variant_id)?.product_name || "",
+        variant_name: cartItems.find((c) => c.variant_id === i.variant_id)?.variant_name || "",
+        quantity: i.quantity,
+        notes: i.notes || "",
+        addons: i.addons || [],
+      }));
+
+      const slipData: OfflineKitchenSlipData = {
+        orderNo: tempOrderNo,
+        orderType: orderPayload.order_type,
+        tableNo: orderPayload.table_no || "",
+        items: slipItems,
+        notes: orderPayload.notes || "",
+      };
+
+      const slipParams = new URLSearchParams({
+        uuid: clientUuid,
+        orderNo: tempOrderNo,
+        orderType: orderPayload.order_type,
+        tableNo: orderPayload.table_no || "",
+        items: JSON.stringify(slipItems),
+        notes: orderPayload.notes || "",
+      });
+      const url = `/print/kitchen/offline?${slipParams.toString()}`;
+
+      setLastOfflineSlip(slipData);
+      setOfflinePrintUrl(url);
+
+      // Directly prints in-memory without navigating to external HTTP URL (0ms latency, works offline)
+      printOfflineKitchenSlip(slipData);
+    };
+
     try {
       if (!isOnline) {
         // Save to outbox with temp order number
@@ -284,24 +325,8 @@ export default function PosTerminal({
           total
         );
         setLoading(false);
+        triggerOfflinePrint(tempOrderNo, clientUuid, payload, cart);
         clearForm();
-        const slipParams = new URLSearchParams({
-          uuid: clientUuid,
-          orderNo: tempOrderNo,
-          orderType: payload.order_type,
-          tableNo: payload.table_no || "",
-          items: JSON.stringify(payload.items.map((i: any) => ({
-            product_name: cart.find(c => c.variant_id === i.variant_id)?.product_name || "",
-            variant_name: cart.find(c => c.variant_id === i.variant_id)?.variant_name || "",
-            quantity: i.quantity,
-            notes: i.notes || "",
-            addons: i.addons || [],
-          }))),
-          notes: payload.notes || "",
-        });
-        const url = `/print/kitchen/offline?${slipParams.toString()}`;
-        setOfflinePrintUrl(url);
-        try { window.open(url, "_blank", "width=420,height=600"); } catch {}
         setSuccessNotice(`Order ${tempOrderNo} saved offline. Will sync when online.`);
         return;
       }
@@ -320,20 +345,8 @@ export default function PosTerminal({
             payload,
             total
           );
+          triggerOfflinePrint(tempOrderNo, clientUuid, payload, cart);
           clearForm();
-          const slipParams = new URLSearchParams({
-            uuid: clientUuid, orderNo: tempOrderNo, orderType: payload.order_type,
-            tableNo: payload.table_no || "",
-            items: JSON.stringify(payload.items.map((i: any) => ({
-              product_name: cart.find(c => c.variant_id === i.variant_id)?.product_name || "",
-              variant_name: cart.find(c => c.variant_id === i.variant_id)?.variant_name || "",
-              quantity: i.quantity, notes: i.notes || "", addons: i.addons || [],
-            }))),
-            notes: payload.notes || "",
-          });
-          const url = `/print/kitchen/offline?${slipParams.toString()}`;
-          setOfflinePrintUrl(url);
-          try { window.open(url, "_blank", "width=420,height=600"); } catch {}
           setSuccessNotice(`Supabase unreachable. Order ${tempOrderNo} saved offline.`);
         } else {
           setError(res.error);
@@ -351,20 +364,8 @@ export default function PosTerminal({
         total
       );
       setLoading(false);
+      triggerOfflinePrint(tempOrderNo, clientUuid, payload, cart);
       clearForm();
-      const slipParams = new URLSearchParams({
-        uuid: clientUuid, orderNo: tempOrderNo, orderType: payload.order_type,
-        tableNo: payload.table_no || "",
-        items: JSON.stringify(payload.items.map((i: any) => ({
-          product_name: cart.find(c => c.variant_id === i.variant_id)?.product_name || "",
-          variant_name: cart.find(c => c.variant_id === i.variant_id)?.variant_name || "",
-          quantity: i.quantity, notes: i.notes || "", addons: i.addons || [],
-        }))),
-        notes: payload.notes || "",
-      });
-      const url = `/print/kitchen/offline?${slipParams.toString()}`;
-      setOfflinePrintUrl(url);
-      try { window.open(url, "_blank", "width=420,height=600"); } catch {}
       setSuccessNotice(`Connection error. Order ${tempOrderNo} saved offline.`);
     }
   };
@@ -828,7 +829,13 @@ export default function PosTerminal({
                 {offlinePrintUrl && (
                   <button
                     type="button"
-                    onClick={() => window.open(offlinePrintUrl, "_blank", "width=420,height=600")}
+                    onClick={() => {
+                      if (lastOfflineSlip) {
+                        printOfflineKitchenSlip(lastOfflineSlip);
+                      } else {
+                        window.open(offlinePrintUrl, "_blank", "width=420,height=600");
+                      }
+                    }}
                     className="w-full py-2 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5"
                   >
                     🖨️ Print Kitchen Slip

@@ -36,13 +36,27 @@ const sw = new Serwist({
       handler: new NetworkOnly(),
     },
 
+    // ── Offline print slips — NetworkFirst ignoring query params ─────────────
+    {
+      matcher: ({ url }) =>
+        url.pathname === "/print/kitchen/offline" ||
+        url.pathname === "/print/bill/offline",
+      handler: new NetworkFirst({
+        cacheName: `${CACHE_VERSION}-pages`,
+        networkTimeoutSeconds: 2,
+        matchOptions: { ignoreSearch: true },
+        plugins: [],
+      }),
+    },
+
     // ── Page navigations — NetworkFirst with offline fallback ───────────────
     // The offline fallback for document requests is handled via fallbacks below.
     {
       matcher: ({ request }) => request.destination === "document",
       handler: new NetworkFirst({
         cacheName: `${CACHE_VERSION}-pages`,
-        networkTimeoutSeconds: 5,
+        networkTimeoutSeconds: 4,
+        matchOptions: { ignoreSearch: true },
         plugins: [],
       }),
     },
@@ -81,6 +95,21 @@ const sw = new Serwist({
       },
     ],
   },
+});
+
+sw.setCatchHandler(async ({ request, url }) => {
+  if (request.destination === "document") {
+    if (
+      url.pathname === "/print/kitchen/offline" ||
+      url.pathname === "/print/bill/offline"
+    ) {
+      const slipMatch = await caches.match(url.pathname, { ignoreSearch: true });
+      if (slipMatch) return slipMatch;
+    }
+    const offlineMatch = await caches.match("/~offline");
+    if (offlineMatch) return offlineMatch;
+  }
+  return Response.error();
 });
 
 sw.addEventListeners();

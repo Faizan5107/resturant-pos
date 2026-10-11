@@ -9,6 +9,7 @@ import AddItemsModal from "./AddItemsModal";
 import AdminCancelModal from "./AdminCancelModal";
 import type { OutboxEntry } from "@/lib/offline/idb";
 import { retryOutboxItem, removeOutboxItem } from "@/lib/offline/sync-manager";
+import { printOfflineKitchenSlip, printOfflineBillSlip } from "@/lib/offline/offlinePrint";
 
 interface OrderItem {
   id: string;
@@ -101,21 +102,19 @@ export default function ActiveOrdersBoard({
     const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
 
     if (isOffline || isTempOrder) {
-      const slipParams = new URLSearchParams({
-        uuid: order.id,
-        orderNo: String(order.order_no),
+      printOfflineKitchenSlip({
+        orderNo: order.order_no,
         orderType: order.order_type || "dine_in",
         tableNo: order.table_no || "",
-        items: JSON.stringify(
-          (order.order_items || []).map((i) => ({
-            product_name: i.product_name,
-            variant_name: i.variant_name,
-            quantity: i.quantity,
-            notes: i.notes || "",
-          }))
-        ),
+        notes: (order as any).notes || "",
+        items: (order.order_items || []).map((i) => ({
+          product_name: i.product_name,
+          variant_name: i.variant_name,
+          quantity: i.quantity,
+          notes: i.notes || "",
+        })),
+        createdAt: (order as any).created_at,
       });
-      window.open(`/print/kitchen/offline?${slipParams.toString()}`, "_blank", "width=420,height=600");
     } else {
       window.open(`/print/kitchen/${order.id}`, "_blank", "width=420,height=600");
     }
@@ -126,27 +125,26 @@ export default function ActiveOrdersBoard({
     const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
 
     if (isOffline || isTempOrder) {
-      const slipParams = new URLSearchParams({
-        orderNo: String(order.order_no),
+      printOfflineBillSlip({
+        orderNo: order.order_no,
         orderType: order.order_type || "dine_in",
         tableNo: order.table_no || "",
         customerName: order.customer_name || "",
-        items: JSON.stringify(
-          (order.order_items || []).map((i) => ({
-            product_name: i.product_name,
-            variant_name: i.variant_name,
-            quantity: i.quantity,
-            line_total: i.line_total,
-            notes: i.notes || "",
-          }))
-        ),
-        subtotal: String(order.subtotal || 0),
-        taxAmount: String(order.tax_amount || 0),
-        total: String(order.total || 0),
+        customerPhone: (order as any).customer_phone || "",
         currency,
-        ...(isReprint ? { reprint: "true" } : {}),
+        isReprint,
+        subtotal: Number(order.subtotal || 0),
+        taxAmount: Number(order.tax_amount || 0),
+        total: Number(order.total || 0),
+        items: (order.order_items || []).map((i) => ({
+          product_name: i.product_name,
+          variant_name: i.variant_name,
+          quantity: i.quantity,
+          line_total: i.line_total,
+          notes: i.notes || "",
+        })),
+        createdAt: (order as any).created_at,
       });
-      window.open(`/print/bill/offline?${slipParams.toString()}`, "_blank", "width=420,height=600");
     } else {
       window.open(`/print/bill/${order.id}${isReprint ? "?reprint=true" : ""}`, "_blank", "width=420,height=600");
     }

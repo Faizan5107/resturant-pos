@@ -17,6 +17,8 @@ const CASHIER_ROUTES = [
   "/cashier/new-order",
   "/cashier/active-orders",
   "/~offline",
+  "/print/kitchen/offline",
+  "/print/bill/offline",
 ];
 
 export function CacheWarmer() {
