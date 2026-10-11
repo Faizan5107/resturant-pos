@@ -15,6 +15,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getOrdersByRestaurant,
+  getSettings,
   saveOrders,
   syncOrdersForRestaurant,
   setMeta,
@@ -38,14 +39,19 @@ export default function ActiveOrdersPage() {
   const [currency, setCurrency] = useState("PKR");
   const [isAdmin, setIsAdmin] = useState(false);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
+  const [restaurantName, setRestaurantName] = useState("");
+  const [restaurantSlug, setRestaurantSlug] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [slogan, setSlogan] = useState("");
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadFromIdb = useCallback(async (rid: string) => {
     try {
-      const [idbOrders, outbox] = await Promise.all([
+      const [idbOrders, outbox, settings] = await Promise.all([
         getOrdersByRestaurant(rid),
         getOutbox(rid),
+        getSettings(rid),
       ]);
       // Sort newest first
       const sorted = [...idbOrders].sort(
@@ -53,6 +59,13 @@ export default function ActiveOrdersPage() {
       );
       setOrders(sorted);
       setOutboxEntries(outbox);
+      if (settings) {
+        if (settings.name) setRestaurantName(settings.name);
+        if (settings.slug) setRestaurantSlug(settings.slug);
+        if (settings.logo_url) setLogoUrl(settings.logo_url);
+        if (settings.slogan) setSlogan(settings.slogan);
+        if (settings.currency) setCurrency(settings.currency);
+      }
     } catch (err) {
       console.warn("Failed to load from IDB:", err);
     } finally {
@@ -178,6 +191,10 @@ export default function ActiveOrdersPage() {
           if (!cancelled) {
             setProducts(bootstrap.products || []);
             setCurrency(bootstrap.currency || "PKR");
+            if (bootstrap.restaurantName) setRestaurantName(bootstrap.restaurantName);
+            if (bootstrap.restaurantSlug) setRestaurantSlug(bootstrap.restaurantSlug);
+            if (bootstrap.logoUrl) setLogoUrl(bootstrap.logoUrl);
+            if (bootstrap.slogan) setSlogan(bootstrap.slogan);
           }
         } catch {
           // Ignore settings/product fetch errors
@@ -234,6 +251,10 @@ export default function ActiveOrdersPage() {
       products={products}
       currency={currency}
       isAdmin={isAdmin}
+      restaurantName={restaurantName || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_name") || "" : "")}
+      restaurantSlug={restaurantSlug || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slug") || "" : "")}
+      logoUrl={logoUrl || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_logo") || "" : "")}
+      slogan={slogan || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slogan") || "" : "")}
     />
   );
 }

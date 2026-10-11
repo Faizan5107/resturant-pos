@@ -118,13 +118,17 @@ export default function NewOrderPage() {
 
     const supabase = createClient();
     try {
-      const [catsRes, prodsRes, addonsRes, settingsRes] = await Promise.all([
+      const [catsRes, prodsRes, addonsRes, settingsRes, restRes] = await Promise.all([
         supabase.from("categories").select("id, name, sort_order").eq("is_active", true).order("sort_order"),
         supabase.from("products").select("id, code, name, image_url, category_id, status, sort_order").neq("status", "hidden").order("sort_order").order("code"),
         supabase.from("addons").select("id, name, price_delta").order("name"),
         supabase.from("restaurant_settings")
-          .select("currency, tax_rate, enable_service_fee, service_fee_amount")
+          .select("currency, tax_rate, enable_service_fee, service_fee_amount, slogan")
           .eq("restaurant_id", restaurantId)
+          .maybeSingle(),
+        supabase.from("restaurants")
+          .select("name, slug, logo_url")
+          .eq("id", restaurantId)
           .maybeSingle(),
       ]);
 
@@ -143,15 +147,24 @@ export default function NewOrderPage() {
       await saveMenuEntries(restaurantId, allEntries.map(e => ({ id: e.id, type: e.type, data: e.data })));
 
       const settingsData = settingsRes.data;
-      if (settingsData) {
-        await saveSettings({
-          restaurant_id: restaurantId,
-          currency: settingsData.currency || "PKR",
-          tax_rate: settingsData.tax_rate || 0,
-          enable_service_fee: settingsData.enable_service_fee || false,
-          service_fee_amount: settingsData.service_fee_amount || 0,
-        });
-      }
+      const restData = restRes.data;
+
+      if (restData?.name) localStorage.setItem("cached_restaurant_name", restData.name);
+      if (restData?.slug) localStorage.setItem("cached_restaurant_slug", restData.slug);
+      if (restData?.logo_url) localStorage.setItem("cached_restaurant_logo", restData.logo_url);
+      if (settingsData?.slogan) localStorage.setItem("cached_restaurant_slogan", settingsData.slogan);
+
+      await saveSettings({
+        restaurant_id: restaurantId,
+        currency: settingsData?.currency || "PKR",
+        tax_rate: settingsData?.tax_rate || 0,
+        enable_service_fee: settingsData?.enable_service_fee || false,
+        service_fee_amount: settingsData?.service_fee_amount || 0,
+        name: restData?.name || "",
+        slug: restData?.slug || "",
+        logo_url: restData?.logo_url || "",
+        slogan: settingsData?.slogan || "",
+      });
 
       await setMeta(`lastMenuSync_${restaurantId}`, Date.now());
 
@@ -255,6 +268,10 @@ export default function NewOrderPage() {
       enableServiceFee={settings?.enable_service_fee || false}
       serviceFeeAmount={settings?.service_fee_amount || 0}
       restaurantId={restaurantId || ""}
+      restaurantName={settings?.name || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_name") || "" : "")}
+      restaurantSlug={settings?.slug || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slug") || "" : "")}
+      logoUrl={settings?.logo_url || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_logo") || "" : "")}
+      slogan={settings?.slogan || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slogan") || "" : "")}
     />
   );
 }

@@ -57,12 +57,20 @@ export default function ActiveOrdersBoard({
   products = [],
   currency = "PKR",
   isAdmin = false,
+  restaurantName = "",
+  restaurantSlug = "",
+  logoUrl = "",
+  slogan = "",
 }: {
   initialOrders: Order[];
   outboxEntries?: OutboxEntry[];
   products?: Product[];
   currency?: string;
   isAdmin?: boolean;
+  restaurantName?: string;
+  restaurantSlug?: string;
+  logoUrl?: string;
+  slogan?: string;
 }) {
   const router = useRouter();
   const currentBusinessDate = getOrderDateString(); // 12pm to 2am shift date
@@ -113,6 +121,10 @@ export default function ActiveOrdersBoard({
           quantity: i.quantity,
           notes: i.notes || "",
         })),
+        restaurantName,
+        restaurantSlug,
+        logoUrl,
+        slogan,
         createdAt: (order as any).created_at,
       });
     } else {
@@ -143,6 +155,10 @@ export default function ActiveOrdersBoard({
           line_total: i.line_total,
           notes: i.notes || "",
         })),
+        restaurantName,
+        restaurantSlug,
+        logoUrl,
+        slogan,
         createdAt: (order as any).created_at,
       });
     } else {
@@ -152,6 +168,16 @@ export default function ActiveOrdersBoard({
 
   const handleMarkPaid = async () => {
     if (!paymentModalOrder) return;
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = paymentModalOrder.id.startsWith("outbox_") || paymentModalOrder.id.startsWith("temp_");
+
+    if (isOffline || isTempOrder) {
+      const targetOrder = { ...paymentModalOrder, status: "paid" };
+      setPaymentModalOrder(null);
+      printBillSlip(targetOrder);
+      return;
+    }
+
     setLoading(true);
     const res = await markOrderPaidAction(paymentModalOrder.id, paymentMethod);
     setLoading(false);
@@ -255,6 +281,68 @@ export default function ActiveOrdersBoard({
                     </div>
                     <div className="text-[10px] text-zinc-500 capitalize">
                       {p.order_type?.replace("_", " ")} {p.table_no ? `· Table ${p.table_no}` : ""}
+                    </div>
+
+                    {/* Quick Print Slips for Pending Sync Orders */}
+                    <div className="flex space-x-1 pt-1 border-t border-zinc-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const mockOrder: any = {
+                            id: entry.clientUuid,
+                            order_no: entry.tempOrderNo,
+                            order_type: p.order_type || "dine_in",
+                            table_no: p.table_no || "",
+                            customer_name: p.customer_name || "",
+                            customer_phone: p.customer_phone || "",
+                            subtotal: p.subtotal || 0,
+                            tax_amount: p.tax_amount || 0,
+                            total: p.total || 0,
+                            created_at: entry.createdAt,
+                            order_items: (p.items || []).map((it: any) => ({
+                              product_name: it.product_name,
+                              variant_name: it.variant_name,
+                              quantity: it.quantity,
+                              line_total: it.line_total || it.price * it.quantity,
+                              notes: it.notes || "",
+                            })),
+                          };
+                          printKitchenSlip(mockOrder);
+                        }}
+                        className="flex-1 py-1 border border-zinc-300 text-zinc-700 text-[10px] font-semibold rounded hover:border-black flex items-center justify-center gap-1"
+                        title="Kitchen Slip"
+                      >
+                        🖨️ Slip
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const mockOrder: any = {
+                            id: entry.clientUuid,
+                            order_no: entry.tempOrderNo,
+                            order_type: p.order_type || "dine_in",
+                            table_no: p.table_no || "",
+                            customer_name: p.customer_name || "",
+                            customer_phone: p.customer_phone || "",
+                            subtotal: p.subtotal || 0,
+                            tax_amount: p.tax_amount || 0,
+                            total: p.total || 0,
+                            created_at: entry.createdAt,
+                            order_items: (p.items || []).map((it: any) => ({
+                              product_name: it.product_name,
+                              variant_name: it.variant_name,
+                              quantity: it.quantity,
+                              line_total: it.line_total || it.price * it.quantity,
+                              notes: it.notes || "",
+                            })),
+                          };
+                          printBillSlip(mockOrder);
+                        }}
+                        className="flex-1 py-1 border border-zinc-300 text-zinc-700 text-[10px] font-semibold rounded hover:border-black flex items-center justify-center gap-1"
+                        title="Customer Bill Slip"
+                      >
+                        🧾 Bill
+                      </button>
                     </div>
                     {entry.status === "needs_attention" && entry.lastError && (
                       <div className="space-y-1.5">
@@ -417,6 +505,13 @@ export default function ActiveOrdersBoard({
                           title="Kitchen Slip"
                         >
                           Slip
+                        </button>
+                        <button
+                          onClick={() => printBillSlip(order)}
+                          className="px-2 py-1.5 border border-zinc-300 text-zinc-700 text-xs font-semibold rounded hover:border-black"
+                          title="Customer Bill Slip"
+                        >
+                          Bill
                         </button>
                       </div>
 

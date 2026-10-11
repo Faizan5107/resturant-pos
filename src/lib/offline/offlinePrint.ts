@@ -22,6 +22,7 @@ export interface OfflineKitchenSlipData {
   notes?: string;
   items: OfflineSlipItem[];
   restaurantName?: string;
+  restaurantSlug?: string;
   logoUrl?: string;
   slogan?: string;
   createdAt?: string;
@@ -43,6 +44,7 @@ export interface OfflineBillSlipData {
   serviceFee?: number;
   total?: number;
   restaurantName?: string;
+  restaurantSlug?: string;
   logoUrl?: string;
   slogan?: string;
   createdAt?: string;
@@ -55,6 +57,7 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
   const notes = data.notes || "";
   const items = data.items || [];
   const restaurantName = data.restaurantName || "";
+  const restaurantSlug = data.restaurantSlug || "";
   const logoUrl = data.logoUrl || "";
   const slogan = data.slogan || "";
 
@@ -102,15 +105,19 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
     })
     .join("");
 
-  const headerLogoOrName = logoUrl
-    ? `<img src="${logoUrl}" alt="${escapeHtml(
-        restaurantName
-      )}" style="max-height:80px;max-width:180px;object-fit:contain;margin:0 auto 4px;display:block;filter:grayscale(100%) contrast(250%);image-rendering:pixelated;mix-blend-mode:multiply;" />`
-    : restaurantName
-      ? `<div style="font-weight:bold;font-size:15px;text-transform:uppercase;">${escapeHtml(
-          restaurantName
-        )}</div>`
-      : "";
+  const headerLogoOrName = `
+    ${logoUrl ? `
+      <img
+        src="${escapeHtml(logoUrl)}"
+        alt="${escapeHtml(restaurantName || "RESTAURANT")}"
+        onerror="this.style.display='none';"
+        style="max-height:80px;max-width:180px;object-fit:contain;margin:0 auto 4px;display:block;filter:grayscale(100%) contrast(250%);image-rendering:pixelated;mix-blend-mode:multiply;"
+      />
+    ` : ""}
+    <div style="font-weight:bold;font-size:16px;text-transform:uppercase;letter-spacing:0.5px;">
+      ${escapeHtml(restaurantName || "RESTAURANT")}
+    </div>
+  `;
 
   return `<!DOCTYPE html>
 <html>
@@ -145,7 +152,8 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
   <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:5mm 3mm 25mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
-      ${slogan ? `<div style="font-size:14px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
+      ${restaurantSlug ? `<div style="font-size:11px;font-weight:bold;font-family:monospace;letter-spacing:1px;text-transform:uppercase;margin:2px 0 3px;">SLUG: ${escapeHtml(restaurantSlug)}</div>` : ""}
+      ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
       <div style="font-weight:bold;font-size:15px;letter-spacing:1px;margin-top:4px;">
         *** KITCHEN SLIP ***
       </div>
@@ -228,6 +236,7 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
   const currency = data.currency || "PKR";
   const isReprint = !!data.isReprint;
   const restaurantName = data.restaurantName || "RESTAURANT";
+  const restaurantSlug = data.restaurantSlug || "";
   const logoUrl = data.logoUrl || "";
   const slogan = data.slogan || "";
 
@@ -295,13 +304,19 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
     })
     .join("");
 
-  const headerLogoOrName = logoUrl
-    ? `<img src="${logoUrl}" alt="${escapeHtml(
-        restaurantName
-      )}" style="max-height:80px;max-width:180px;object-fit:contain;margin:0 auto 4px;display:block;filter:grayscale(100%) contrast(250%);image-rendering:pixelated;mix-blend-mode:multiply;" />`
-    : `<div style="font-weight:bold;font-size:24px;text-transform:uppercase;">${escapeHtml(
-        restaurantName
-      )}</div>`;
+  const headerLogoOrName = `
+    ${logoUrl ? `
+      <img
+        src="${escapeHtml(logoUrl)}"
+        alt="${escapeHtml(restaurantName)}"
+        onerror="this.style.display='none';"
+        style="max-height:80px;max-width:180px;object-fit:contain;margin:0 auto 4px;display:block;filter:grayscale(100%) contrast(250%);image-rendering:pixelated;mix-blend-mode:multiply;"
+      />
+    ` : ""}
+    <div style="font-weight:bold;font-size:20px;text-transform:uppercase;letter-spacing:0.5px;">
+      ${escapeHtml(restaurantName)}
+    </div>
+  `;
 
   return `<!DOCTYPE html>
 <html>
@@ -336,7 +351,8 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
   <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:0 3mm 35mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
-      ${slogan ? `<div style="font-size:14px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
+      ${restaurantSlug ? `<div style="font-size:11px;font-weight:bold;font-family:monospace;letter-spacing:1px;text-transform:uppercase;margin:2px 0 3px;">SLUG: ${escapeHtml(restaurantSlug)}</div>` : ""}
+      ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
       <div style="font-size:10px;margin-top:2px;font-style:italic;">
         [OFFLINE RECEIPT]
       </div>

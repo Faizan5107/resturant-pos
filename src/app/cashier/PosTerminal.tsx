@@ -7,7 +7,12 @@ import { placeOrderAction } from "./actions";
 import { useOffline } from "@/lib/offline/useOffline";
 import { addOrderToOutbox } from "@/lib/offline/outbox";
 import { saveOfflineDraft, OfflineDraftRow } from "@/lib/offline/sqlite-db";
-import { printOfflineKitchenSlip, OfflineKitchenSlipData } from "@/lib/offline/offlinePrint";
+import {
+  printOfflineKitchenSlip,
+  printOfflineBillSlip,
+  OfflineKitchenSlipData,
+  OfflineBillSlipData,
+} from "@/lib/offline/offlinePrint";
 import DraftsModal from "./DraftsModal";
 
 interface Category {
@@ -68,6 +73,10 @@ export default function PosTerminal({
   enableServiceFee = false,
   serviceFeeAmount = 0,
   restaurantId = "",
+  restaurantName = "",
+  restaurantSlug = "",
+  logoUrl = "",
+  slogan = "",
 }: {
   categories: Category[];
   products: Product[];
@@ -77,6 +86,10 @@ export default function PosTerminal({
   enableServiceFee?: boolean;
   serviceFeeAmount?: number;
   restaurantId?: string;
+  restaurantName?: string;
+  restaurantSlug?: string;
+  logoUrl?: string;
+  slogan?: string;
 }) {
   const router = useRouter();
   const { isOnline, pendingCount, isSyncing, syncPaused, lastSyncResult, reconciledNotice, triggerSync, resumeAfterLogin, dismissReconciled } = useOffline(restaurantId || null);
@@ -94,6 +107,7 @@ export default function PosTerminal({
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
   const [offlinePrintUrl, setOfflinePrintUrl] = useState<string | null>(null);
   const [lastOfflineSlip, setLastOfflineSlip] = useState<OfflineKitchenSlipData | null>(null);
+  const [lastOfflineBillSlip, setLastOfflineBillSlip] = useState<OfflineBillSlipData | null>(null);
 
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
@@ -287,16 +301,45 @@ export default function PosTerminal({
         product_name: cartItems.find((c) => c.variant_id === i.variant_id)?.product_name || "",
         variant_name: cartItems.find((c) => c.variant_id === i.variant_id)?.variant_name || "",
         quantity: i.quantity,
+        line_total: (cartItems.find((c) => c.variant_id === i.variant_id)?.unit_price || 0) * i.quantity,
         notes: i.notes || "",
         addons: i.addons || [],
       }));
 
-      const slipData: OfflineKitchenSlipData = {
+      const resolvedRestName = restaurantName || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_name") || "" : "");
+      const resolvedSlug = restaurantSlug || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slug") || "" : "");
+      const resolvedLogo = logoUrl || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_logo") || "" : "");
+      const resolvedSlogan = slogan || (typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_slogan") || "" : "");
+
+      const kitchenData: OfflineKitchenSlipData = {
         orderNo: tempOrderNo,
         orderType: orderPayload.order_type,
         tableNo: orderPayload.table_no || "",
         items: slipItems,
         notes: orderPayload.notes || "",
+        restaurantName: resolvedRestName,
+        restaurantSlug: resolvedSlug,
+        logoUrl: resolvedLogo,
+        slogan: resolvedSlogan,
+      };
+
+      const billData: OfflineBillSlipData = {
+        orderNo: tempOrderNo,
+        orderType: orderPayload.order_type,
+        tableNo: orderPayload.table_no || "",
+        customerName: orderPayload.customer_name || "",
+        customerPhone: orderPayload.customer_phone || "",
+        currency,
+        items: slipItems,
+        subtotal,
+        taxAmount,
+        deliveryFee,
+        serviceFee: appliedServiceFee,
+        total,
+        restaurantName: resolvedRestName,
+        restaurantSlug: resolvedSlug,
+        logoUrl: resolvedLogo,
+        slogan: resolvedSlogan,
       };
 
       const slipParams = new URLSearchParams({
@@ -306,14 +349,19 @@ export default function PosTerminal({
         tableNo: orderPayload.table_no || "",
         items: JSON.stringify(slipItems),
         notes: orderPayload.notes || "",
+        restaurantName: resolvedRestName,
+        slug: resolvedSlug,
+        logoUrl: resolvedLogo,
+        slogan: resolvedSlogan,
       });
       const url = `/print/kitchen/offline?${slipParams.toString()}`;
 
-      setLastOfflineSlip(slipData);
+      setLastOfflineSlip(kitchenData);
+      setLastOfflineBillSlip(billData);
       setOfflinePrintUrl(url);
 
       // Directly prints in-memory without navigating to external HTTP URL (0ms latency, works offline)
-      printOfflineKitchenSlip(slipData);
+      printOfflineKitchenSlip(kitchenData);
     };
 
     try {
@@ -826,20 +874,33 @@ export default function PosTerminal({
             {successNotice && (
               <div className="p-3 border border-black bg-white text-black text-xs rounded font-medium space-y-2 shadow-sm">
                 <p>{successNotice}</p>
-                {offlinePrintUrl && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (lastOfflineSlip) {
-                        printOfflineKitchenSlip(lastOfflineSlip);
-                      } else {
-                        window.open(offlinePrintUrl, "_blank", "width=420,height=600");
-                      }
-                    }}
-                    className="w-full py-2 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    🖨️ Print Kitchen Slip
-                  </button>
+                {(offlinePrintUrl || lastOfflineSlip || lastOfflineBillSlip) && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (lastOfflineSlip) {
+                          printOfflineKitchenSlip(lastOfflineSlip);
+                        } else if (offlinePrintUrl) {
+                          window.open(offlinePrintUrl, "_blank", "width=420,height=600");
+                        }
+                      }}
+                      className="py-2 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      🖨️ Kitchen Slip
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (lastOfflineBillSlip) {
+                          printOfflineBillSlip(lastOfflineBillSlip);
+                        }
+                      }}
+                      className="py-2 border-2 border-black bg-white text-black text-xs font-bold rounded hover:bg-zinc-100 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      🧾 Customer Slip
+                    </button>
+                  </div>
                 )}
               </div>
             )}

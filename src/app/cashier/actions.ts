@@ -220,6 +220,10 @@ export async function fetchCashierBootstrapAction(): Promise<{
   restaurantId?: string;
   role?: string;
   currency?: string;
+  restaurantName?: string;
+  restaurantSlug?: string;
+  logoUrl?: string;
+  slogan?: string;
   products?: Array<{
     id: string; code: string; name: string; status: string;
     product_variants: Array<{ id: string; name: string; sale_price: number }>;
@@ -239,7 +243,7 @@ export async function fetchCashierBootstrapAction(): Promise<{
 
     if (!profile?.restaurant_id) return { error: "Restaurant not found" };
 
-    const [prodRes, settingsRes] = await Promise.all([
+    const [prodRes, settingsRes, restRes] = await Promise.all([
       supabase
         .from("products")
         .select("id, code, name, status, product_variants(id, name, sale_price)")
@@ -248,15 +252,24 @@ export async function fetchCashierBootstrapAction(): Promise<{
         .order("code", { ascending: true }),
       supabase
         .from("restaurant_settings")
-        .select("currency")
+        .select("currency, slogan")
         .eq("restaurant_id", profile.restaurant_id)
-        .single(),
+        .maybeSingle(),
+      supabase
+        .from("restaurants")
+        .select("name, slug, logo_url")
+        .eq("id", profile.restaurant_id)
+        .maybeSingle(),
     ]);
 
     return {
       restaurantId: profile.restaurant_id,
       role: profile.role,
       currency: settingsRes.data?.currency || "PKR",
+      restaurantName: restRes.data?.name || "",
+      restaurantSlug: restRes.data?.slug || "",
+      logoUrl: restRes.data?.logo_url || "",
+      slogan: settingsRes.data?.slogan || "",
       products: (prodRes.data as any) || [],
     };
   } catch (err: unknown) {

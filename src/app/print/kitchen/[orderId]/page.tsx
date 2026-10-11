@@ -38,12 +38,12 @@ export default async function KitchenSlipPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, restaurant_id, restaurants(name, logo_url)")
+    .select("full_name, restaurant_id, restaurants(name, slug, logo_url)")
     .single();
 
   const { data: restaurant } = await supabase
     .from("restaurants")
-    .select("name, logo_url")
+    .select("name, slug, logo_url")
     .eq("id", order.restaurant_id)
     .single();
 
@@ -54,6 +54,8 @@ export default async function KitchenSlipPage({
 
   const restaurantName =
     restaurant?.name || (profile?.restaurants as any)?.name || "Restaurant";
+  const restaurantSlug =
+    restaurant?.slug || (profile?.restaurants as any)?.slug || "";
   const cashierName = (profile as any)?.full_name || "Staff";
   const logoUrl = restaurant?.logo_url || (settings as any)?.logo_url || (profile?.restaurants as any)?.logo_url;
   const slogan = settings?.slogan || settings?.receipt_footer || "";
@@ -129,27 +131,37 @@ export default async function KitchenSlipPage({
         {/* ── HEADER ── */}
         <div style={{ textAlign: "center", marginBottom: "6px" }}>
           {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={restaurantName}
-              style={{
-                maxHeight: "110px",
-                maxWidth: "220px",
-                objectFit: "contain",
-                margin: "0 auto 6px",
-                display: "block",
-                filter: "grayscale(100%) contrast(250%)",
-                imageRendering: "pixelated",
-                mixBlendMode: "multiply",
-              }}
-            />
+            <>
+              <img
+                src={logoUrl}
+                alt={restaurantName}
+                style={{
+                  maxHeight: "110px",
+                  maxWidth: "220px",
+                  objectFit: "contain",
+                  margin: "0 auto 4px",
+                  display: "block",
+                  filter: "grayscale(100%) contrast(250%)",
+                  imageRendering: "pixelated",
+                  mixBlendMode: "multiply",
+                }}
+              />
+              <div style={{ fontWeight: "bold", fontSize: "16px", textTransform: "uppercase" }}>
+                {restaurantName}
+              </div>
+            </>
           ) : (
             <div style={{ fontWeight: "bold", fontSize: "16px", textTransform: "uppercase" }}>
               {restaurantName}
             </div>
           )}
+          {restaurantSlug && (
+            <div style={{ fontSize: "11px", fontWeight: "bold", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase", marginTop: "2px" }}>
+              SLUG: {restaurantSlug}
+            </div>
+          )}
           {slogan && (
-            <div style={{ fontSize: "21.5px", fontWeight: "bold", marginTop: "4px" }}>
+            <div style={{ fontSize: "13px", fontWeight: "bold", marginTop: "3px" }}>
               {slogan}
             </div>
           )}

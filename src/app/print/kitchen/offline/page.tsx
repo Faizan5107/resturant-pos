@@ -29,6 +29,10 @@ function OfflineKitchenSlipContent() {
   const orderType = searchParams.get("orderType") || "dine_in";
   const tableNo   = searchParams.get("tableNo")   || "";
   const notes     = searchParams.get("notes")     || "";
+  const restaurantName = searchParams.get("restaurantName") || searchParams.get("restaurant") || "";
+  const slug = searchParams.get("slug") || searchParams.get("restaurantSlug") || "";
+  const logoUrl = searchParams.get("logoUrl") || "";
+  const slogan = searchParams.get("slogan") || "";
 
   let items: SlipItem[] = [];
   try {
@@ -82,6 +86,48 @@ function OfflineKitchenSlipContent() {
       >
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "6px" }}>
+          {logoUrl && (
+            <img
+              src={logoUrl}
+              alt={restaurantName || "Restaurant"}
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = "none";
+              }}
+              style={{
+                maxHeight: "80px",
+                maxWidth: "180px",
+                objectFit: "contain",
+                margin: "0 auto 4px",
+                display: "block",
+                filter: "grayscale(100%) contrast(250%)",
+                imageRendering: "pixelated",
+                mixBlendMode: "multiply",
+              }}
+            />
+          )}
+          <div
+            style={{
+              fontWeight: "bold",
+              fontSize: "16px",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            {restaurantName || "RESTAURANT"}
+          </div>
+
+          {slug && (
+            <div style={{ fontSize: "11px", fontWeight: "bold", fontFamily: "monospace", letterSpacing: "1px", textTransform: "uppercase", margin: "2px 0 3px" }}>
+              SLUG: {slug}
+            </div>
+          )}
+
+          {slogan && (
+            <div style={{ fontSize: "12px", fontWeight: "bold", fontStyle: "italic", marginTop: "2px" }}>
+              {slogan}
+            </div>
+          )}
+
           <div style={{ fontWeight: "bold", fontSize: "15px", letterSpacing: "1px", marginTop: "4px" }}>
             *** KITCHEN SLIP ***
           </div>

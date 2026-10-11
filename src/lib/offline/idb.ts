@@ -26,6 +26,7 @@ export interface SettingsEntry {
   enable_service_fee: boolean;
   service_fee_amount: number;
   name?: string;
+  slug?: string;
   logo_url?: string;
   slogan?: string;
 }
