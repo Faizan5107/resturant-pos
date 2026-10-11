@@ -40,6 +40,11 @@ export function CashierLayoutClient({
   const [logoutError, setLogoutError] = useState<string | null>(null);
 
   const handleLogout = async () => {
+    if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      setLogoutError("Sign out is not possible in offline mode. Please connect to the internet to sign out.");
+      return;
+    }
+
     if (pendingCount > 0) {
       setLogoutError(
         `You have ${pendingCount} order${pendingCount > 1 ? "s" : ""} pending sync. Please wait until they sync before signing out, or connect to the internet.`
@@ -100,6 +105,7 @@ export function CashierLayoutClient({
           <button
             type="button"
             onClick={handleLogout}
+            title={!isOnline ? "Sign out is not possible in offline mode" : "Sign Out"}
             className="px-3 py-1.5 text-xs font-semibold border border-zinc-700 text-zinc-300 hover:text-white hover:border-white rounded-md transition-colors"
           >
             Sign Out
@@ -109,11 +115,14 @@ export function CashierLayoutClient({
 
       {/* Logout blocked warning */}
       {logoutError && (
-        <div className="bg-white border-b border-black px-6 py-2 flex items-center justify-between">
-          <span className="text-xs font-medium text-black">{logoutError}</span>
+        <div className="bg-amber-50 border-b border-amber-300 px-6 py-2.5 flex items-center justify-between shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-700 text-sm font-bold">⚠️</span>
+            <span className="text-xs font-medium text-amber-950">{logoutError}</span>
+          </div>
           <button
             onClick={() => setLogoutError(null)}
-            className="text-xs font-bold text-black ml-4"
+            className="text-xs font-bold text-amber-900 hover:text-black ml-4 p-1"
           >
             ✕
           </button>
