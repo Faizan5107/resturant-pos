@@ -28,7 +28,7 @@ import {
   stopSyncManager,
   configureSyncFunctions,
 } from "@/lib/offline/sync-manager";
-import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction } from "@/app/cashier/actions";
+import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchMenuDataAction } from "@/app/cashier/actions";
 import PosTerminal from "@/app/cashier/PosTerminal";
 
 // ─── Types matching PosTerminal props ─────────────────────────────────────────
@@ -121,7 +121,23 @@ export default function NewOrderPage() {
       return { id: ad.id, name: ad.name, price_delta: ad.price_delta };
     });
 
-    setData({ categories, products, addons: addonList, settings: settings || null, restaurantId });
+    const localTaxRate = typeof window !== "undefined" ? parseFloat(localStorage.getItem("cached_tax_rate") || "") : NaN;
+    const localEnableServiceFee = typeof window !== "undefined" ? localStorage.getItem("cached_enable_service_fee") === "true" : false;
+    const localServiceFeeAmount = typeof window !== "undefined" ? parseFloat(localStorage.getItem("cached_service_fee_amount") || "") : NaN;
+
+    const mergedSettings = settings ? {
+      ...settings,
+      tax_rate: settings.tax_rate ?? (!isNaN(localTaxRate) ? localTaxRate : 0),
+      enable_service_fee: settings.enable_service_fee ?? localEnableServiceFee,
+      service_fee_amount: settings.service_fee_amount ?? (!isNaN(localServiceFeeAmount) ? localServiceFeeAmount : 0),
+    } : {
+      currency: "PKR",
+      tax_rate: !isNaN(localTaxRate) ? localTaxRate : 0,
+      enable_service_fee: localEnableServiceFee,
+      service_fee_amount: !isNaN(localServiceFeeAmount) ? localServiceFeeAmount : 0,
+    };
+
+    setData({ categories, products, addons: addonList, settings: mergedSettings as any, restaurantId });
     setLoading(false);
   }, []);
 
@@ -129,46 +145,40 @@ export default function NewOrderPage() {
   const refreshFromServer = useCallback(async (restaurantId: string) => {
     if (!navigator.onLine) return;
     setSyncing(true);
-    const supabase = createClient();
     try {
-      const [catsRes, prodsRes, addonsRes, settingsRes, restRes] = await Promise.all([
-        supabase.from("categories").select("id, name, sort_order").eq("is_active", true).order("sort_order"),
-        supabase.from("products").select("id, code, name, image_url, category_id, status, sort_order").neq("status", "hidden").order("sort_order").order("code"),
-        supabase.from("addons").select("id, name, price_delta").order("name"),
-        supabase.from("restaurant_settings")
-          .select("currency, tax_rate, enable_service_fee, service_fee_amount, slogan")
-          .eq("restaurant_id", restaurantId)
-          .maybeSingle(),
-        supabase.from("restaurants")
-          .select("name, slug, logo_url")
-          .eq("id", restaurantId)
-          .maybeSingle(),
-      ]);
+      const res = await fetchMenuDataAction();
+      if (res.error || !res.restaurantId) {
+        setSyncing(false);
+        return;
+      }
 
-      const prodIds = (prodsRes.data || []).map((p: any) => p.id);
-      const varRes = prodIds.length > 0
-        ? await supabase.from("product_variants").select("id, product_id, name, sale_price").in("product_id", prodIds)
-        : { data: [] };
+      const resolvedRid = res.restaurantId || restaurantId;
 
       const allEntries: MenuEntry[] = [
-        ...(catsRes.data || []).map((r: any) => ({ id: `cat_${r.id}`, restaurant_id: restaurantId, type: "category" as const, data: r })),
-        ...(prodsRes.data || []).map((r: any) => ({ id: `prod_${r.id}`, restaurant_id: restaurantId, type: "product" as const, data: r })),
-        ...(varRes.data || []).map((r: any) => ({ id: `var_${r.id}`, restaurant_id: restaurantId, type: "variant" as const, data: r })),
-        ...(addonsRes.data || []).map((r: any) => ({ id: `addon_${r.id}`, restaurant_id: restaurantId, type: "addon" as const, data: r })),
+        ...(res.categories || []).map((r: any) => ({ id: `cat_${r.id}`, restaurant_id: resolvedRid, type: "category" as const, data: r })),
+        ...(res.products || []).map((r: any) => ({ id: `prod_${r.id}`, restaurant_id: resolvedRid, type: "product" as const, data: r })),
+        ...(res.variants || []).map((r: any) => ({ id: `var_${r.id}`, restaurant_id: resolvedRid, type: "variant" as const, data: r })),
+        ...(res.addons || []).map((r: any) => ({ id: `addon_${r.id}`, restaurant_id: resolvedRid, type: "addon" as const, data: r })),
       ];
 
-      await saveMenuEntries(restaurantId, allEntries.map(e => ({ id: e.id, type: e.type, data: e.data })));
+      await saveMenuEntries(resolvedRid, allEntries.map(e => ({ id: e.id, type: e.type, data: e.data })));
 
-      const settingsData = settingsRes.data;
-      const restData = restRes.data;
+      const settingsData = res.settings;
+      const restData = res.restaurant;
 
       if (restData?.name) localStorage.setItem("cached_restaurant_name", restData.name);
       if (restData?.slug) localStorage.setItem("cached_restaurant_slug", restData.slug);
       if (restData?.logo_url) localStorage.setItem("cached_restaurant_logo", restData.logo_url);
       if (settingsData?.slogan) localStorage.setItem("cached_restaurant_slogan", settingsData.slogan);
 
+      if (settingsData) {
+        localStorage.setItem("cached_tax_rate", String(settingsData.tax_rate ?? 0));
+        localStorage.setItem("cached_enable_service_fee", String(settingsData.enable_service_fee ? "true" : "false"));
+        localStorage.setItem("cached_service_fee_amount", String(settingsData.service_fee_amount ?? 0));
+      }
+
       await saveSettings({
-        restaurant_id: restaurantId,
+        restaurant_id: resolvedRid,
         currency: settingsData?.currency || "PKR",
         tax_rate: settingsData?.tax_rate || 0,
         enable_service_fee: settingsData?.enable_service_fee || false,
@@ -179,12 +189,12 @@ export default function NewOrderPage() {
         slogan: settingsData?.slogan || "",
       });
 
-      await setMeta(`lastMenuSync_${restaurantId}`, Date.now());
+      await setMeta(`lastMenuSync_${resolvedRid}`, Date.now());
       setLastSyncTime(Date.now());
       setSyncing(false);
 
       // Re-render from IDB with fresh data
-      await loadFromIdb(restaurantId);
+      await loadFromIdb(resolvedRid);
     } catch {
       setSyncing(false);
       // Ignore background refresh errors (we already have IDB data)
@@ -337,9 +347,9 @@ export default function NewOrderPage() {
         products={products}
         addons={addons}
         currency={settings?.currency || "PKR"}
-        taxRate={settings?.tax_rate || 0}
-        enableServiceFee={settings?.enable_service_fee || false}
-        serviceFeeAmount={settings?.service_fee_amount || 0}
+        taxRate={Number(settings?.tax_rate || 0)}
+        enableServiceFee={Boolean(settings?.enable_service_fee)}
+        serviceFeeAmount={Number(settings?.service_fee_amount || 0)}
         restaurantId={restaurantId || ""}
         restaurantName={settings?.name || cachedBranding.name}
         restaurantSlug={settings?.slug || cachedBranding.slug}

@@ -35,20 +35,25 @@ export default async function FinalBillPage({
 
   if (!order) notFound();
 
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("*")
-    .single();
+  const { createAdminClient } = await import("@/lib/supabase/server");
+  const adminClient = createAdminClient();
+
+  const [{ data: settings }, { data: restaurant }] = await Promise.all([
+    adminClient
+      .from("restaurant_settings")
+      .select("*")
+      .eq("restaurant_id", order.restaurant_id)
+      .maybeSingle(),
+    adminClient
+      .from("restaurants")
+      .select("name, slug, logo_url")
+      .eq("id", order.restaurant_id)
+      .maybeSingle(),
+  ]);
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, restaurant_id, restaurants(name, slug, logo_url)")
-    .single();
-
-  const { data: restaurant } = await supabase
-    .from("restaurants")
-    .select("name, slug, logo_url")
-    .eq("id", order.restaurant_id)
     .single();
 
   const restaurantName =

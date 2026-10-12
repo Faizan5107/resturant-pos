@@ -111,12 +111,13 @@ export async function placeOrderAction(
       // Fetch restaurant settings specifically for this restaurant
       const { data: settings } = await adminClient
         .from("restaurant_settings")
-        .select("enable_service_fee, service_fee_amount")
+        .select("enable_service_fee, service_fee_amount, tax_rate")
         .eq("restaurant_id", ord.restaurant_id)
         .maybeSingle();
 
       const subtotal = Number(ord.subtotal || 0);
-      const taxAmount = Number(ord.tax_amount || 0);
+      const taxRate = Number(settings?.tax_rate || 0);
+      const taxAmount = Math.round((subtotal * (taxRate / 100)) * 100) / 100;
       const deliveryFee = ord.order_type === "delivery" ? Number(payload.delivery_fee || 0) : 0;
 
       // Apply service fee only for dine-in if enabled in settings
@@ -131,6 +132,7 @@ export async function placeOrderAction(
         .update({
           order_no: finalOrderNo,
           order_date: bizOrderDate,
+          tax_amount: taxAmount,
           delivery_fee: deliveryFee,
           service_fee: serviceFee,
           total: newTotal,
@@ -138,6 +140,8 @@ export async function placeOrderAction(
         .eq("id", data.order_id);
 
       data.order_no = finalOrderNo;
+      data.tax_amount = taxAmount;
+      data.service_fee = serviceFee;
       data.total = newTotal;
     }
   }
@@ -318,6 +322,109 @@ export async function fetchCashierBootstrapAction(): Promise<{
     };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : "Bootstrap failed" };
+  }
+}
+
+/**
+ * Fetches all menu categories, products, variants, addons, and restaurant settings
+ * using server-side auth & adminClient. Guaranteed to work on Vercel and offline sync.
+ */
+export async function fetchMenuDataAction(): Promise<{
+  restaurantId?: string;
+  categories?: any[];
+  products?: any[];
+  variants?: any[];
+  addons?: any[];
+  settings?: {
+    currency: string;
+    tax_rate: number;
+    enable_service_fee: boolean;
+    service_fee_amount: number;
+    slogan?: string;
+  };
+  restaurant?: {
+    name: string;
+    slug: string;
+    logo_url?: string;
+  };
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Unauthenticated" };
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("restaurant_id")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.restaurant_id) return { error: "Restaurant not found" };
+
+    const { createAdminClient } = await import("@/lib/supabase/server");
+    const adminClient = createAdminClient();
+
+    const [catsRes, prodsRes, addonsRes, settingsRes, restRes] = await Promise.all([
+      adminClient
+        .from("categories")
+        .select("id, name, sort_order")
+        .eq("restaurant_id", profile.restaurant_id)
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true }),
+      adminClient
+        .from("products")
+        .select("id, code, name, image_url, category_id, status, sort_order")
+        .eq("restaurant_id", profile.restaurant_id)
+        .neq("status", "hidden")
+        .order("sort_order", { ascending: true })
+        .order("code", { ascending: true }),
+      adminClient
+        .from("addons")
+        .select("id, name, price_delta")
+        .eq("restaurant_id", profile.restaurant_id)
+        .order("name", { ascending: true }),
+      adminClient
+        .from("restaurant_settings")
+        .select("currency, tax_rate, enable_service_fee, service_fee_amount, slogan")
+        .eq("restaurant_id", profile.restaurant_id)
+        .maybeSingle(),
+      adminClient
+        .from("restaurants")
+        .select("name, slug, logo_url")
+        .eq("id", profile.restaurant_id)
+        .maybeSingle(),
+    ]);
+
+    const prodIds = (prodsRes.data || []).map((p: any) => p.id);
+    const varRes = prodIds.length > 0
+      ? await adminClient
+          .from("product_variants")
+          .select("id, product_id, name, sale_price")
+          .in("product_id", prodIds)
+      : { data: [] };
+
+    return {
+      restaurantId: profile.restaurant_id,
+      categories: catsRes.data || [],
+      products: prodsRes.data || [],
+      variants: varRes.data || [],
+      addons: addonsRes.data || [],
+      settings: {
+        currency: settingsRes.data?.currency || "PKR",
+        tax_rate: Number(settingsRes.data?.tax_rate || 0),
+        enable_service_fee: Boolean(settingsRes.data?.enable_service_fee),
+        service_fee_amount: Number(settingsRes.data?.service_fee_amount || 0),
+        slogan: settingsRes.data?.slogan || "",
+      },
+      restaurant: {
+        name: restRes.data?.name || "",
+        slug: restRes.data?.slug || "",
+        logo_url: restRes.data?.logo_url || "",
+      },
+    };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : "Fetch menu failed" };
   }
 }
 

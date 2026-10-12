@@ -1,9 +1,11 @@
 -- ============================================================================
--- MIGRATION 00017: PRESERVE OFFLINE ORDER NUMBERS ON SYNC
+-- MIGRATION 00017: PRESERVE OFFLINE ORDER NUMBERS & RESTORE SERVICE FEE & TAX
 -- ============================================================================
 
--- Update place_order to allow client to specify order_no (from offline mode)
--- If provided and no collision exists for that day, reuse the exact order number.
+-- Update place_order to:
+-- 1. Honor client-provided order_no (from offline mode) if no collision exists today
+-- 2. Correctly calculate tax_amount based on restaurant_settings.tax_rate
+-- 3. Correctly calculate and add service_fee for dine_in orders based on restaurant_settings
 CREATE OR REPLACE FUNCTION public.place_order(
   p_payload   jsonb,
   p_client_uuid uuid DEFAULT NULL
@@ -14,28 +16,31 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_restaurant_id  uuid;
-  v_timezone       text := 'Asia/Karachi';
-  v_order_date     date;
-  v_next_no        integer;
-  v_formatted_no   text;
-  v_order_id       uuid;
-  v_item           jsonb;
-  v_variant_id     uuid;
-  v_variant        record;
-  v_unit_price     numeric(12,2);
-  v_unit_cost      numeric(12,2);
-  v_quantity       integer;
-  v_line_total     numeric(12,2);
-  v_subtotal       numeric(12,2) := 0.00;
-  v_tax_rate       numeric(5,2)  := 0.00;
-  v_tax_amount     numeric(12,2) := 0.00;
-  v_total          numeric(12,2) := 0.00;
-  v_order_item_id  uuid;
-  v_addon          jsonb;
-  v_addon_delta    numeric(12,2);
-  v_order_type     text;
-  v_desired_no     text;
+  v_restaurant_id       uuid;
+  v_timezone            text := 'Asia/Karachi';
+  v_order_date          date;
+  v_next_no             integer;
+  v_formatted_no        text;
+  v_order_id            uuid;
+  v_item                jsonb;
+  v_variant_id          uuid;
+  v_variant             record;
+  v_unit_price          numeric(12,2);
+  v_unit_cost           numeric(12,2);
+  v_quantity            integer;
+  v_line_total          numeric(12,2);
+  v_subtotal            numeric(12,2) := 0.00;
+  v_tax_rate            numeric(5,2)  := 0.00;
+  v_tax_amount          numeric(12,2) := 0.00;
+  v_enable_service_fee  boolean       := false;
+  v_service_fee_amount  numeric(12,2) := 0.00;
+  v_service_fee         numeric(12,2) := 0.00;
+  v_total               numeric(12,2) := 0.00;
+  v_order_item_id       uuid;
+  v_addon               jsonb;
+  v_addon_delta         numeric(12,2);
+  v_order_type          text;
+  v_desired_no          text;
 BEGIN
   v_restaurant_id := public.current_restaurant_id();
   IF v_restaurant_id IS NULL THEN
@@ -66,9 +71,9 @@ BEGIN
 
   v_order_type := COALESCE(p_payload->>'order_type', 'dine_in');
 
-  -- Get restaurant settings for timezone & tax rate
-  SELECT timezone, tax_rate
-  INTO   v_timezone, v_tax_rate
+  -- Get restaurant settings for timezone, tax rate, and service fee
+  SELECT timezone, tax_rate, COALESCE(enable_service_fee, false), COALESCE(service_fee_amount, 0.00)
+  INTO   v_timezone, v_tax_rate, v_enable_service_fee, v_service_fee_amount
   FROM   public.restaurant_settings
   WHERE  restaurant_id = v_restaurant_id;
 
@@ -199,12 +204,16 @@ BEGIN
 
   -- ── 4. Totals ─────────────────────────────────────────────────────────────
   v_tax_amount := round((v_subtotal * (v_tax_rate / 100.0)), 2);
-  v_total      := v_subtotal + v_tax_amount;
+  IF v_order_type = 'dine_in' AND v_enable_service_fee THEN
+    v_service_fee := v_service_fee_amount;
+  END IF;
+  v_total      := v_subtotal + v_tax_amount + v_service_fee;
 
   UPDATE public.orders
-  SET subtotal   = v_subtotal,
-      tax_amount = v_tax_amount,
-      total      = v_total
+  SET subtotal    = v_subtotal,
+      tax_amount  = v_tax_amount,
+      service_fee = v_service_fee,
+      total       = v_total
   WHERE id = v_order_id;
 
   -- ── 5. Audit Log ──────────────────────────────────────────────────────────
