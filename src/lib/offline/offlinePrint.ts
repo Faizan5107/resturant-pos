@@ -200,25 +200,6 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
 
     <div style="height:20mm;"></div>
   </div>
-
-  <script>
-    function doPrint() {
-      setTimeout(function() {
-        try {
-          window.focus();
-          window.print();
-        } catch(e) {}
-      }, 250);
-    }
-    window.addEventListener("afterprint", function() {
-      try { window.close(); } catch(e) {}
-    });
-    if (document.readyState === "complete") {
-      doPrint();
-    } else {
-      window.addEventListener("load", doPrint);
-    }
-  </script>
 </body>
 </html>`;
 }
@@ -440,25 +421,6 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
 
     <div style="height:80mm;"></div>
   </div>
-
-  <script>
-    function doPrint() {
-      setTimeout(function() {
-        try {
-          window.focus();
-          window.print();
-        } catch(e) {}
-      }, 250);
-    }
-    window.addEventListener("afterprint", function() {
-      try { window.close(); } catch(e) {}
-    });
-    if (document.readyState === "complete") {
-      doPrint();
-    } else {
-      window.addEventListener("load", doPrint);
-    }
-  </script>
 </body>
 </html>`;
 }
@@ -466,13 +428,35 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
 /**
  * Directly prints HTML in-memory without navigating to an HTTP URL.
  * Uses a hidden iframe directly so NO new browser window or tab ever opens.
+ * Guaranteed to execute exactly ONCE per call (no duplicate preview/print).
  */
+let isPrintJobRunning = false;
+
 export function printHtmlDirectly(html: string): boolean {
   if (typeof window === "undefined") return false;
 
-  // Primary: Hidden iframe (0ms latency, no popup window, never blocked by popup blockers)
+  // Sanitize any embedded window.print script so document never triggers print independently
+  const sanitizedHtml = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+
+  // Prevent accidental rapid-fire double clicks
+  if (isPrintJobRunning) {
+    console.warn("POS print job in progress, ignoring duplicate call.");
+    return false;
+  }
+  isPrintJobRunning = true;
+  setTimeout(() => {
+    isPrintJobRunning = false;
+  }, 1200);
+
+  // Primary: Hidden iframe (0ms latency, in-memory, no popup window, never blocked)
   try {
+    const existingIframe = document.getElementById("pos-silent-print-frame");
+    if (existingIframe) {
+      existingIframe.remove();
+    }
+
     const iframe = document.createElement("iframe");
+    iframe.id = "pos-silent-print-frame";
     iframe.style.position = "fixed";
     iframe.style.right = "0";
     iframe.style.bottom = "0";
@@ -483,23 +467,37 @@ export function printHtmlDirectly(html: string): boolean {
     iframe.setAttribute("aria-hidden", "true");
     document.body.appendChild(iframe);
 
+    let hasPrinted = false;
+    const triggerPrintOnce = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Direct iframe print error:", err);
+      } finally {
+        setTimeout(() => {
+          try {
+            iframe.remove();
+          } catch {}
+        }, 3000);
+      }
+    };
+
     const doc = iframe.contentWindow?.document || iframe.contentDocument;
     if (doc) {
       doc.open();
-      doc.write(html);
+      doc.write(sanitizedHtml);
       doc.close();
-      iframe.contentWindow?.focus();
-      setTimeout(() => {
-        try {
-          iframe.contentWindow?.print();
-        } finally {
-          setTimeout(() => {
-            try {
-              iframe.remove();
-            } catch {}
-          }, 3000);
-        }
-      }, 50);
+
+      if (iframe.contentWindow) {
+        iframe.contentWindow.onload = () => {
+          setTimeout(triggerPrintOnce, 60);
+        };
+      }
+      // Safety timeout in case onload fired immediately
+      setTimeout(triggerPrintOnce, 250);
       return true;
     }
   } catch (err) {
@@ -508,10 +506,11 @@ export function printHtmlDirectly(html: string): boolean {
 
   // Fallback: window.open (only if iframe fails)
   try {
+    const sanitizedHtml = html.replace(/<script[\s\S]*?<\/script>/gi, "");
     const printWindow = window.open("", "_blank", "width=420,height=600");
     if (printWindow && !printWindow.closed) {
       printWindow.document.open();
-      printWindow.document.write(html);
+      printWindow.document.write(sanitizedHtml);
       printWindow.document.close();
       printWindow.focus();
       setTimeout(() => {
