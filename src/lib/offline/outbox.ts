@@ -20,15 +20,25 @@ import {
   setMeta,
   getOrdersByRestaurant,
 } from "./idb";
-import { getOrderDateString } from "@/lib/dates";
+import { getOrderDateString, isOrderInBusinessDate } from "@/lib/dates";
 
 // ─── Daily order counter ─────────────────────────────────────────────────────
 
-/** Updates the known daily order counter to at least the given number. */
-export async function updateDailyOrderCounter(restaurantId: string, orderNo: number | string): Promise<void> {
+/** Updates the known daily order counter to at least the given number (only if from today's shift). */
+export async function updateDailyOrderCounter(
+  restaurantId: string,
+  orderNo: number | string,
+  orderCreatedAt?: string
+): Promise<void> {
   const num = typeof orderNo === "number" ? orderNo : parseInt(orderNo, 10);
   if (isNaN(num) || num <= 0) return;
   const today = getOrderDateString();
+
+  // If a timestamp is provided, strictly ignore orders from previous days / shifts
+  if (orderCreatedAt && !isOrderInBusinessDate(orderCreatedAt, today)) {
+    return;
+  }
+
   const counterKey = `daily_order_counter_${restaurantId}_${today}`;
   const current = (await getMeta<number>(counterKey)) ?? 0;
   if (num > current) {
@@ -43,11 +53,14 @@ export async function nextTempOrderNo(restaurantId: string): Promise<string> {
 
   let current = (await getMeta<number>(counterKey)) ?? 0;
 
-  // If counter is not set yet, check cached orders in IDB for today
+  // If counter is not set yet, check cached orders in IDB strictly for today's shift
   if (current === 0) {
     try {
       const localOrders = await getOrdersByRestaurant(restaurantId);
       for (const ord of localOrders) {
+        if (ord.created_at && !isOrderInBusinessDate(ord.created_at, today)) {
+          continue; // Skip past dates!
+        }
         const n = parseInt(ord.order_no, 10);
         if (!isNaN(n) && n > current) {
           current = n;
@@ -56,10 +69,13 @@ export async function nextTempOrderNo(restaurantId: string): Promise<string> {
     } catch {}
   }
 
-  // Also check existing outbox entries for this restaurant
+  // Also check existing outbox entries strictly for today's shift
   try {
     const entries = await getOutboxEntries(restaurantId);
     for (const entry of entries) {
+      if (entry.createdAt && !isOrderInBusinessDate(entry.createdAt, today)) {
+        continue; // Skip past dates!
+      }
       if (entry.tempOrderNo) {
         const n = parseInt(entry.tempOrderNo, 10);
         if (!isNaN(n) && n > current) {

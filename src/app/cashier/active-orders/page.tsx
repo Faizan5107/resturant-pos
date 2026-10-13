@@ -25,6 +25,7 @@ import { getOutbox, updateDailyOrderCounter } from "@/lib/offline/outbox";
 import { OutboxEntry } from "@/lib/offline/idb";
 import { configureSyncFunctions, startSyncManager } from "@/lib/offline/sync-manager";
 import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchOrdersAction, fetchCashierBootstrapAction } from "@/app/cashier/actions";
+import { getOrderDateString, isOrderInBusinessDate } from "@/lib/dates";
 import ActiveOrdersBoard from "./ActiveOrdersBoard";
 
 interface Product {
@@ -102,9 +103,12 @@ export default function ActiveOrdersPage() {
         await syncOrdersForRestaurant(resolvedRid, mapped);
         await setMeta(`lastOrdersSync_${resolvedRid}`, Date.now());
 
-        // Update daily order counter with max order_no from server
+        // Update daily order counter with max order_no from server strictly for today's shift
+        const todayShift = getOrderDateString();
         for (const o of res.orders) {
-          if (o.order_no) updateDailyOrderCounter(resolvedRid, o.order_no).catch(() => {});
+          if (o.order_no && o.created_at && isOrderInBusinessDate(o.created_at, todayShift)) {
+            updateDailyOrderCounter(resolvedRid, o.order_no, o.created_at).catch(() => {});
+          }
         }
 
         await loadFromIdb(resolvedRid);
