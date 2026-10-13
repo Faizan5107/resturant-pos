@@ -465,33 +465,12 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
 
 /**
  * Directly prints HTML in-memory without navigating to an HTTP URL.
- * First attempts window.open("", "_blank"); falls back to a hidden iframe if popup blocked.
+ * Uses a hidden iframe directly so NO new browser window or tab ever opens.
  */
 export function printHtmlDirectly(html: string): boolean {
   if (typeof window === "undefined") return false;
 
-  // Attempt 1: window.open (cleanest for POS thermal printer previews)
-  try {
-    const printWindow = window.open("", "_blank", "width=420,height=600");
-    if (printWindow && !printWindow.closed) {
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-      printWindow.focus();
-      // Extra safety trigger in case inline script is suppressed by browser policy
-      setTimeout(() => {
-        try {
-          printWindow.focus();
-          printWindow.print();
-        } catch {}
-      }, 350);
-      return true;
-    }
-  } catch (err) {
-    console.warn("Direct window.open failed, trying iframe print fallback:", err);
-  }
-
-  // Attempt 2: Fallback to hidden iframe (bypasses browser popup blockers completely)
+  // Primary: Hidden iframe (0ms latency, no popup window, never blocked by popup blockers)
   try {
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
@@ -501,6 +480,7 @@ export function printHtmlDirectly(html: string): boolean {
     iframe.style.height = "0";
     iframe.style.border = "0";
     iframe.style.visibility = "hidden";
+    iframe.setAttribute("aria-hidden", "true");
     document.body.appendChild(iframe);
 
     const doc = iframe.contentWindow?.document || iframe.contentDocument;
@@ -517,13 +497,33 @@ export function printHtmlDirectly(html: string): boolean {
             try {
               iframe.remove();
             } catch {}
-          }, 2000);
+          }, 3000);
         }
-      }, 300);
+      }, 50);
       return true;
     }
   } catch (err) {
-    console.error("Iframe print fallback also failed:", err);
+    console.warn("Hidden iframe direct print failed, trying window.open fallback:", err);
+  }
+
+  // Fallback: window.open (only if iframe fails)
+  try {
+    const printWindow = window.open("", "_blank", "width=420,height=600");
+    if (printWindow && !printWindow.closed) {
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch {}
+      }, 150);
+      return true;
+    }
+  } catch (err) {
+    console.error("Window.open fallback also failed:", err);
   }
 
   return false;

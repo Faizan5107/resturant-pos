@@ -106,64 +106,54 @@ export default function ActiveOrdersBoard({
   };
 
   const printKitchenSlip = (order: Order) => {
-    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-    const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
-
-    if (isOffline || isTempOrder) {
-      printOfflineKitchenSlip({
-        orderNo: order.order_no,
-        orderType: order.order_type || "dine_in",
-        tableNo: order.table_no || "",
-        notes: (order as any).notes || "",
-        items: (order.order_items || []).map((i) => ({
-          product_name: i.product_name,
-          variant_name: i.variant_name,
-          quantity: i.quantity,
-          notes: i.notes || "",
-        })),
-        restaurantName,
-        restaurantSlug,
-        logoUrl,
-        slogan,
-        createdAt: (order as any).created_at,
-      });
-    } else {
-      window.open(`/print/kitchen/${order.id}`, "_blank", "width=420,height=600");
-    }
+    printOfflineKitchenSlip({
+      orderNo: order.order_no,
+      orderType: order.order_type || "dine_in",
+      tableNo: order.table_no || "",
+      notes: (order as any).notes || "",
+      items: (order.order_items || []).map((i) => ({
+        product_name: i.product_name,
+        variant_name: i.variant_name,
+        quantity: i.quantity,
+        notes: i.notes || "",
+        addons: (i as any).order_item_addons || (i as any).addons || [],
+      })),
+      restaurantName,
+      restaurantSlug,
+      logoUrl,
+      slogan,
+      createdAt: (order as any).created_at,
+    });
   };
 
   const printBillSlip = (order: Order, isReprint = false) => {
-    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-    const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
-
-    if (isOffline || isTempOrder) {
-      printOfflineBillSlip({
-        orderNo: order.order_no,
-        orderType: order.order_type || "dine_in",
-        tableNo: order.table_no || "",
-        customerName: order.customer_name || "",
-        customerPhone: (order as any).customer_phone || "",
-        currency,
-        isReprint,
-        subtotal: Number(order.subtotal || 0),
-        taxAmount: Number(order.tax_amount || 0),
-        total: Number(order.total || 0),
-        items: (order.order_items || []).map((i) => ({
-          product_name: i.product_name,
-          variant_name: i.variant_name,
-          quantity: i.quantity,
-          line_total: i.line_total,
-          notes: i.notes || "",
-        })),
-        restaurantName,
-        restaurantSlug,
-        logoUrl,
-        slogan,
-        createdAt: (order as any).created_at,
-      });
-    } else {
-      window.open(`/print/bill/${order.id}${isReprint ? "?reprint=true" : ""}`, "_blank", "width=420,height=600");
-    }
+    printOfflineBillSlip({
+      orderNo: order.order_no,
+      orderType: order.order_type || "dine_in",
+      tableNo: order.table_no || "",
+      customerName: order.customer_name || "",
+      customerPhone: (order as any).customer_phone || "",
+      currency,
+      isReprint,
+      subtotal: Number(order.subtotal || 0),
+      taxAmount: Number(order.tax_amount || 0),
+      deliveryFee: Number((order as any).delivery_fee || 0),
+      serviceFee: Number((order as any).service_fee || 0),
+      total: Number(order.total || 0),
+      items: (order.order_items || []).map((i) => ({
+        product_name: i.product_name,
+        variant_name: i.variant_name,
+        quantity: i.quantity,
+        line_total: i.line_total,
+        notes: i.notes || "",
+        addons: (i as any).order_item_addons || (i as any).addons || [],
+      })),
+      restaurantName,
+      restaurantSlug,
+      logoUrl,
+      slogan,
+      createdAt: (order as any).created_at,
+    });
   };
 
   const handleMarkPaid = async () => {

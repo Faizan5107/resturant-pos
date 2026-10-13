@@ -400,12 +400,12 @@ export default function PosTerminal({
           setError(res.error);
         }
       } else if (res.result?.order_id) {
+        const confirmedOrderNo = res.result.order_no || "0001";
         if (res.result.order_no) {
-          updateDailyOrderCounter(restaurantId || "unknown", res.result.order_no).catch(() => {});
+          updateDailyOrderCounter(restaurantId || "unknown", res.result.order_no, new Date().toISOString()).catch(() => {});
         }
+        triggerOfflinePrint(confirmedOrderNo, res.result.order_id, payload, cart);
         clearForm();
-        try { window.open(`/print/kitchen/${res.result.order_id}`, "_blank", "width=420,height=600"); } catch {}
-        // Delay navigation so the browser doesn't block the popup window before it opens
         setTimeout(() => router.push("/cashier/active-orders"), 300);
       }
     } catch {
