@@ -82,12 +82,16 @@ export default function ActiveOrdersBoard({
   const [paymentModalOrder, setPaymentModalOrder] = useState<Order | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "online">("cash");
 
+  // Separate modal for delivery rider payment collection (rider returned with cash)
+  const [riderPaymentOrder, setRiderPaymentOrder] = useState<Order | null>(null);
+  const [riderPaymentMethod, setRiderPaymentMethod] = useState<"cash" | "card" | "online">("cash");
+
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
   const [addItemsOrder, setAddItemsOrder] = useState<Order | null>(null);
 
   const [loading, setLoading] = useState(false);
 
-  // Filter running vs completed orders
+  // Filter running vs completed orders — out_for_delivery stays in "Running"
   const openOrders = initialOrders.filter((o) => o.status !== "paid" && o.status !== "cancelled");
   const allCompletedOrders = initialOrders.filter((o) => o.status === "paid" || o.status === "cancelled");
 
@@ -175,6 +179,51 @@ export default function ActiveOrdersBoard({
     if (res.success) {
       const targetOrder = paymentModalOrder;
       setPaymentModalOrder(null);
+      printBillSlip(targetOrder);
+      router.refresh();
+    }
+  };
+
+  /**
+   * Delivery only: prints bill slip & moves order to "out_for_delivery".
+   * Order stays visible on the board so cashier knows rider is out.
+   */
+  const handleDispatchRider = async (order: Order) => {
+    // Print the customer bill slip for the rider to carry
+    printBillSlip(order);
+
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
+    if (isOffline || isTempOrder) return; // offline: just print, status sync happens later
+
+    setLoading(true);
+    await updateOrderStatusAction(order.id, "out_for_delivery");
+    setLoading(false);
+    router.refresh();
+  };
+
+  /**
+   * Delivery only: rider has returned with cash — collect payment and mark paid.
+   */
+  const handleRiderPaymentReceived = async () => {
+    if (!riderPaymentOrder) return;
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = riderPaymentOrder.id.startsWith("outbox_") || riderPaymentOrder.id.startsWith("temp_");
+
+    if (isOffline || isTempOrder) {
+      const targetOrder = { ...riderPaymentOrder, status: "paid" };
+      setRiderPaymentOrder(null);
+      printBillSlip(targetOrder);
+      return;
+    }
+
+    setLoading(true);
+    const res = await markOrderPaidAction(riderPaymentOrder.id, riderPaymentMethod);
+    setLoading(false);
+
+    if (res.success) {
+      const targetOrder = riderPaymentOrder;
+      setRiderPaymentOrder(null);
       printBillSlip(targetOrder);
       router.refresh();
     }
@@ -377,6 +426,8 @@ export default function ActiveOrdersBoard({
           {displayedOrders.map((order) => {
             const isPaid = order.status === "paid";
             const isCancelled = order.status === "cancelled";
+            const isDelivery = order.order_type === "delivery";
+            const isOutForDelivery = order.status === "out_for_delivery";
 
 
             return (
@@ -385,6 +436,8 @@ export default function ActiveOrdersBoard({
                 className={`border rounded-lg p-4 bg-white flex flex-col justify-between space-y-3 ${
                   isCancelled
                     ? "border-red-300 bg-red-50/20"
+                    : isOutForDelivery
+                    ? "border-amber-400 bg-amber-50/30"
                     : "border-black"
                 }`}
               >
@@ -410,10 +463,12 @@ export default function ActiveOrdersBoard({
                             ? "bg-emerald-100 text-emerald-900 border border-emerald-400"
                             : isCancelled
                             ? "bg-red-100 text-red-800 border border-red-400 uppercase"
+                            : isOutForDelivery
+                            ? "bg-amber-100 text-amber-900 border border-amber-400"
                             : "border border-black text-black"
                         }`}
                       >
-                        {order.status}
+                        {isOutForDelivery ? "🛵 Out for Delivery" : order.status}
                       </span>
                       <p className="text-[10px] text-zinc-500 mt-1">
                         {formatTime(order.created_at)} ({formatDate(order.created_at, "dd MMM")})
@@ -456,72 +511,111 @@ export default function ActiveOrdersBoard({
 
                   {!isPaid && !isCancelled && (
                     <div className="space-y-1.5">
-                      {/* Status Advancement Buttons */}
-                      <div className="grid grid-cols-3 gap-1">
-                        <button
-                          onClick={() => handleStatusChange(order.id, "preparing")}
-                          disabled={order.status === "preparing" || loading}
-                          className="py-1 text-[11px] font-semibold border border-black rounded hover:bg-black hover:text-white disabled:opacity-50"
-                        >
-                          Preparing
-                        </button>
-                        <button
-                          onClick={() => handleStatusChange(order.id, "ready")}
-                          disabled={order.status === "ready" || loading}
-                          className="py-1 text-[11px] font-semibold border border-black rounded hover:bg-black hover:text-white disabled:opacity-50"
-                        >
-                          Ready
-                        </button>
-                        <button
-                          onClick={() => handleStatusChange(order.id, "delivered")}
-                          disabled={order.status === "delivered" || loading}
-                          className="py-1 text-[11px] font-semibold border border-black rounded hover:bg-black hover:text-white disabled:opacity-50"
-                        >
-                          Delivered
-                        </button>
-                      </div>
+                      {/* Status Advancement Buttons — hidden while out for delivery */}
+                      {!isOutForDelivery && (
+                        <div className="grid grid-cols-3 gap-1">
+                          <button
+                            onClick={() => handleStatusChange(order.id, "preparing")}
+                            disabled={order.status === "preparing" || loading}
+                            className="py-1 text-[11px] font-semibold border border-black rounded hover:bg-black hover:text-white disabled:opacity-50"
+                          >
+                            Preparing
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange(order.id, "ready")}
+                            disabled={order.status === "ready" || loading}
+                            className="py-1 text-[11px] font-semibold border border-black rounded hover:bg-black hover:text-white disabled:opacity-50"
+                          >
+                            Ready
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange(order.id, "delivered")}
+                            disabled={order.status === "delivered" || loading}
+                            className="py-1 text-[11px] font-semibold border border-black rounded hover:bg-black hover:text-white disabled:opacity-50"
+                          >
+                            Delivered
+                          </button>
+                        </div>
+                      )}
 
-                      {/* Pay & Print Slips Actions */}
-                      <div className="flex space-x-1">
-                        <button
-                          onClick={() => setPaymentModalOrder(order)}
-                          className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800"
-                        >
-                          Collect Payment
-                        </button>
-                        <button
-                          onClick={() => printKitchenSlip(order)}
-                          className="px-2 py-1.5 border border-zinc-300 text-zinc-700 text-xs font-semibold rounded hover:border-black"
-                          title="Kitchen Slip"
-                        >
-                          Slip
-                        </button>
-                        <button
-                          onClick={() => printBillSlip(order)}
-                          className="px-2 py-1.5 border border-zinc-300 text-zinc-700 text-xs font-semibold rounded hover:border-black"
-                          title="Customer Bill Slip"
-                        >
-                          Bill
-                        </button>
-                      </div>
+                      {/* Delivery: rider out — show awaiting cash banner + payment received button */}
+                      {isDelivery && isOutForDelivery && (
+                        <>
+                          <div className="rounded-md bg-amber-50 border border-amber-300 px-3 py-2 text-[11px] text-amber-900 font-semibold flex items-center gap-2">
+                            <span>🛵</span>
+                            <span>Rider dispatched — awaiting cash collection</span>
+                          </div>
+                          <button
+                            onClick={() => { setRiderPaymentOrder(order); setRiderPaymentMethod("cash"); }}
+                            disabled={loading}
+                            className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded disabled:opacity-50 transition-colors"
+                          >
+                            💰 Payment Received (Rider Returned)
+                          </button>
+                          <button
+                            onClick={() => printBillSlip(order)}
+                            className="w-full py-1.5 border border-amber-400 text-amber-800 text-xs font-semibold rounded hover:bg-amber-50"
+                          >
+                            Reprint Slip for Rider
+                          </button>
+                        </>
+                      )}
 
-                      {/* Add Items and Cancel Actions */}
-                      <div className="flex items-center space-x-1 pt-1 border-t border-zinc-100">
-                        <button
-                          type="button"
-                          onClick={() => setAddItemsOrder(order)}
-                          className="flex-1 py-1 bg-emerald-50 border border-emerald-600 text-emerald-900 text-xs font-bold rounded hover:bg-emerald-100 transition-colors"
-                        >
-                          + Add Items
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCancelModalOrder(order)}
-                          className="px-3 py-1 border border-red-300 text-red-700 text-xs font-semibold rounded hover:bg-red-50 hover:border-red-600 transition-colors"
-                        >
-                          Cancel {isAdmin ? "(Admin)" : ""}
-                        </button>
-                      </div>
+                      {/* Pay & Print Slips Actions — delivery shows Dispatch Rider, others show Collect Payment */}
+                      {!isOutForDelivery && (
+                        <div className="flex space-x-1">
+                          {isDelivery ? (
+                            <button
+                              onClick={() => handleDispatchRider(order)}
+                              disabled={loading}
+                              className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800 disabled:opacity-50"
+                            >
+                              🛵 Dispatch Rider
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setPaymentModalOrder(order)}
+                              className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded hover:bg-zinc-800"
+                            >
+                              Collect Payment
+                            </button>
+                          )}
+                          <button
+                            onClick={() => printKitchenSlip(order)}
+                            className="px-2 py-1.5 border border-zinc-300 text-zinc-700 text-xs font-semibold rounded hover:border-black"
+                            title="Kitchen Slip"
+                          >
+                            Slip
+                          </button>
+                          <button
+                            onClick={() => printBillSlip(order)}
+                            className="px-2 py-1.5 border border-zinc-300 text-zinc-700 text-xs font-semibold rounded hover:border-black"
+                            title="Customer Bill Slip"
+                          >
+                            Bill
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Add Items and Cancel Actions — hidden while out for delivery */}
+                      {!isOutForDelivery && (
+                        <div className="flex items-center space-x-1 pt-1 border-t border-zinc-100">
+                          <button
+                            type="button"
+                            onClick={() => setAddItemsOrder(order)}
+                            className="flex-1 py-1 bg-emerald-50 border border-emerald-600 text-emerald-900 text-xs font-bold rounded hover:bg-emerald-100 transition-colors"
+                          >
+                            + Add Items
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCancelModalOrder(order)}
+                            className="px-3 py-1 border border-red-300 text-red-700 text-xs font-semibold rounded hover:bg-red-50 hover:border-red-600 transition-colors"
+                          >
+                            Cancel {isAdmin ? "(Admin)" : ""}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -596,6 +690,71 @@ export default function ActiveOrdersBoard({
                 className="px-4 py-1.5 bg-black text-white rounded text-xs font-semibold hover:bg-zinc-800 disabled:opacity-50"
               >
                 {loading ? "Processing..." : "Confirm & Print Bill"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rider Payment Received Modal — delivery order, rider returned with cash */}
+      {riderPaymentOrder && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white border border-amber-400 rounded-lg w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-zinc-200 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-black">
+                  💰 Payment Received • Order #{riderPaymentOrder.order_no}
+                </h2>
+                <p className="text-[11px] text-amber-700 font-semibold mt-0.5">Rider has returned — collect cash from rider</p>
+              </div>
+              <button
+                onClick={() => setRiderPaymentOrder(null)}
+                className="text-zinc-500 hover:text-black font-semibold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-center py-2 border border-zinc-200 rounded bg-zinc-50">
+              <p className="text-xs text-zinc-500 uppercase font-semibold">Total Amount Collected from Rider</p>
+              <p className="text-2xl font-bold text-black">
+                {formatMoney(riderPaymentOrder.total, currency)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-black">Payment Method</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["cash", "card", "online"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setRiderPaymentMethod(m)}
+                    className={`py-2 text-xs font-bold rounded border capitalize ${
+                      riderPaymentMethod === m
+                        ? "bg-black text-white border-black"
+                        : "border-zinc-300 text-zinc-700 hover:border-black"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-4 border-t border-zinc-200">
+              <button
+                onClick={() => setRiderPaymentOrder(null)}
+                className="px-3 py-1.5 border border-zinc-300 text-zinc-700 rounded text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRiderPaymentReceived}
+                disabled={loading}
+                className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-bold disabled:opacity-50"
+              >
+                {loading ? "Processing..." : "Confirm & Print Receipt"}
               </button>
             </div>
           </div>
