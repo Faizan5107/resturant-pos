@@ -249,7 +249,7 @@ export default function PosTerminal({
 
   const subtotal = cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
   const taxAmount = (subtotal * taxRate) / 100;
-  const appliedServiceFee = orderType === "dine_in" && enableServiceFee ? Number(serviceFeeAmount || 0) : 0;
+  const appliedServiceFee = orderType === "dine_in" && (enableServiceFee || serviceFeeAmount > 0) ? Number(serviceFeeAmount || 0) : 0;
   const total = subtotal + taxAmount + (orderType === "delivery" ? Number(deliveryFee || 0) : 0) + appliedServiceFee;
 
   const clearForm = () => {
@@ -927,32 +927,32 @@ export default function PosTerminal({
               </div>
             )}
 
-            <div className="space-y-1 text-xs text-zinc-600">
-              <div className="flex justify-between">
+            <div className="space-y-1.5 text-xs text-zinc-700 bg-white p-3 rounded-lg border border-zinc-200 shadow-sm">
+              <div className="flex justify-between font-semibold text-zinc-900">
                 <span>Subtotal</span>
                 <span className="font-mono">{formatMoney(subtotal, currency)}</span>
               </div>
               {taxRate > 0 && (
-                <div className="flex justify-between text-zinc-500 text-[11px]">
+                <div className="flex justify-between text-zinc-600">
                   <span>Tax ({taxRate}%)</span>
-                  <span className="font-mono">{formatMoney(taxAmount, currency)}</span>
+                  <span className="font-mono font-medium">{formatMoney(taxAmount, currency)}</span>
                 </div>
               )}
               {orderType === "delivery" && deliveryFee > 0 && (
-                <div className="flex justify-between text-zinc-500 text-[11px]">
+                <div className="flex justify-between text-zinc-600">
                   <span>Delivery Fee</span>
-                  <span className="font-mono">{formatMoney(deliveryFee, currency)}</span>
+                  <span className="font-mono font-medium">{formatMoney(deliveryFee, currency)}</span>
                 </div>
               )}
-              {orderType === "dine_in" && enableServiceFee && (
-                <div className="flex justify-between text-zinc-500 text-[11px]">
-                  <span>Service Fee</span>
-                  <span className="font-mono">{formatMoney(appliedServiceFee, currency)}</span>
+              {orderType === "dine_in" && (enableServiceFee || serviceFeeAmount > 0) && (
+                <div className="flex justify-between text-zinc-600">
+                  <span>Service Fee (Dine-In)</span>
+                  <span className="font-mono font-medium">{formatMoney(appliedServiceFee, currency)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-base font-bold text-black border-t border-zinc-200 pt-1">
+              <div className="flex justify-between text-base font-bold text-black border-t border-zinc-200 pt-2 mt-1">
                 <span>Total Amount</span>
-                <span className="font-mono">{formatMoney(total, currency)}</span>
+                <span className="font-mono text-lg">{formatMoney(total, currency)}</span>
               </div>
             </div>
 

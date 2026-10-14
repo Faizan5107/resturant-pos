@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
 import { formatTime, formatDate, getOrderDateString, isOrderInBusinessDate } from "@/lib/dates";
@@ -91,9 +91,15 @@ export default function ActiveOrdersBoard({
 
   const [loading, setLoading] = useState(false);
 
-  // Filter running vs completed orders — out_for_delivery stays in "Running"
-  const openOrders = initialOrders.filter((o) => o.status !== "paid" && o.status !== "cancelled");
-  const allCompletedOrders = initialOrders.filter((o) => o.status === "paid" || o.status === "cancelled");
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+
+  useEffect(() => {
+    setOrders(initialOrders);
+  }, [initialOrders]);
+
+  // Filter running vs completed orders — out_for_delivery and delivered stay in "Running"
+  const openOrders = orders.filter((o) => o.status !== "paid" && o.status !== "cancelled");
+  const allCompletedOrders = orders.filter((o) => o.status === "paid" || o.status === "cancelled");
 
   // Filter Order History by current business date by default
   const historyOrders = showAllDates
@@ -103,10 +109,17 @@ export default function ActiveOrdersBoard({
   const displayedOrders = activeTab === "open" ? openOrders : historyOrders;
 
   const handleStatusChange = async (orderId: string, nextStatus: string) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
     setLoading(true);
-    await updateOrderStatusAction(orderId, nextStatus);
+    const res = await updateOrderStatusAction(orderId, nextStatus);
     setLoading(false);
-    router.refresh();
+    if (res?.error) {
+      alert(`Error updating status: ${res.error}`);
+    } else {
+      router.refresh();
+    }
   };
 
   const printKitchenSlip = (order: Order) => {
@@ -162,44 +175,58 @@ export default function ActiveOrdersBoard({
 
   const handleMarkPaid = async () => {
     if (!paymentModalOrder) return;
-    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-    const isTempOrder = paymentModalOrder.id.startsWith("outbox_") || paymentModalOrder.id.startsWith("temp_");
+    const targetOrder = paymentModalOrder;
+    setPaymentModalOrder(null);
 
-    if (isOffline || isTempOrder) {
-      const targetOrder = { ...paymentModalOrder, status: "paid" };
-      setPaymentModalOrder(null);
-      printBillSlip(targetOrder);
-      return;
-    }
+    // Optimistically update local state immediately
+    setOrders((prev) =>
+      prev.map((o) => (o.id === targetOrder.id ? { ...o, status: "paid", payment_method: paymentMethod } : o))
+    );
+
+    printBillSlip(targetOrder);
+
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = targetOrder.id.startsWith("outbox_") || targetOrder.id.startsWith("temp_");
+    if (isOffline || isTempOrder) return;
 
     setLoading(true);
-    const res = await markOrderPaidAction(paymentModalOrder.id, paymentMethod);
+    const res = await markOrderPaidAction(targetOrder.id, paymentMethod);
     setLoading(false);
 
-    if (res.success) {
-      const targetOrder = paymentModalOrder;
-      setPaymentModalOrder(null);
-      printBillSlip(targetOrder);
+    if (res?.error) {
+      alert(`Payment error: ${res.error}`);
+    } else {
       router.refresh();
     }
   };
 
   /**
-   * Delivery only: prints bill slip & moves order to "out_for_delivery".
-   * Order stays visible on the board so cashier knows rider is out.
+   * Delivery only: prints bill slip & moves order to "delivered" (Rider Out).
+   * Order stays visible on the running board with "💰 Payment Received (Rider Returned)" button.
    */
   const handleDispatchRider = async (order: Order) => {
-    // Print the customer bill slip for the rider to carry
+    // 1. Immediately update local state so button flips to "Payment Received" with zero latency!
+    setOrders((prev) =>
+      prev.map((o) => (o.id === order.id ? { ...o, status: "delivered" } : o))
+    );
+
+    // 2. Print the customer bill slip for the rider to carry
     printBillSlip(order);
 
     const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
     const isTempOrder = order.id.startsWith("outbox_") || order.id.startsWith("temp_");
-    if (isOffline || isTempOrder) return; // offline: just print, status sync happens later
+    if (isOffline || isTempOrder) return;
 
     setLoading(true);
-    await updateOrderStatusAction(order.id, "out_for_delivery");
+    const res = await updateOrderStatusAction(order.id, "delivered");
     setLoading(false);
-    router.refresh();
+
+    if (res?.error) {
+      console.error("Failed to update status to delivered:", res.error);
+      alert(`Error updating order: ${res.error}`);
+    } else {
+      router.refresh();
+    }
   };
 
   /**
@@ -207,24 +234,27 @@ export default function ActiveOrdersBoard({
    */
   const handleRiderPaymentReceived = async () => {
     if (!riderPaymentOrder) return;
-    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-    const isTempOrder = riderPaymentOrder.id.startsWith("outbox_") || riderPaymentOrder.id.startsWith("temp_");
+    const targetOrder = riderPaymentOrder;
+    setRiderPaymentOrder(null);
 
-    if (isOffline || isTempOrder) {
-      const targetOrder = { ...riderPaymentOrder, status: "paid" };
-      setRiderPaymentOrder(null);
-      printBillSlip(targetOrder);
-      return;
-    }
+    // 1. Immediately update local state to paid
+    setOrders((prev) =>
+      prev.map((o) => (o.id === targetOrder.id ? { ...o, status: "paid", payment_method: riderPaymentMethod } : o))
+    );
+
+    printBillSlip(targetOrder);
+
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+    const isTempOrder = targetOrder.id.startsWith("outbox_") || targetOrder.id.startsWith("temp_");
+    if (isOffline || isTempOrder) return;
 
     setLoading(true);
-    const res = await markOrderPaidAction(riderPaymentOrder.id, riderPaymentMethod);
+    const res = await markOrderPaidAction(targetOrder.id, riderPaymentMethod);
     setLoading(false);
 
-    if (res.success) {
-      const targetOrder = riderPaymentOrder;
-      setRiderPaymentOrder(null);
-      printBillSlip(targetOrder);
+    if (res?.error) {
+      alert(`Payment error: ${res.error}`);
+    } else {
       router.refresh();
     }
   };
@@ -427,7 +457,7 @@ export default function ActiveOrdersBoard({
             const isPaid = order.status === "paid";
             const isCancelled = order.status === "cancelled";
             const isDelivery = order.order_type === "delivery";
-            const isOutForDelivery = order.status === "out_for_delivery";
+            const isOutForDelivery = order.status === "out_for_delivery" || (isDelivery && order.status === "delivered");
 
 
             return (

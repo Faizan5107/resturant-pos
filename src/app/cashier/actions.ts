@@ -268,6 +268,9 @@ export async function fetchCashierBootstrapAction(): Promise<{
   restaurantId?: string;
   role?: string;
   currency?: string;
+  taxRate?: number;
+  enableServiceFee?: boolean;
+  serviceFeeAmount?: number;
   restaurantName?: string;
   restaurantSlug?: string;
   logoUrl?: string;
@@ -300,7 +303,7 @@ export async function fetchCashierBootstrapAction(): Promise<{
         .order("code", { ascending: true }),
       supabase
         .from("restaurant_settings")
-        .select("currency, slogan")
+        .select("currency, tax_rate, enable_service_fee, service_fee_amount, slogan")
         .eq("restaurant_id", profile.restaurant_id)
         .maybeSingle(),
       supabase
@@ -314,6 +317,9 @@ export async function fetchCashierBootstrapAction(): Promise<{
       restaurantId: profile.restaurant_id,
       role: profile.role,
       currency: settingsRes.data?.currency || "PKR",
+      taxRate: Number(settingsRes.data?.tax_rate || 0),
+      enableServiceFee: Boolean(settingsRes.data?.enable_service_fee),
+      serviceFeeAmount: Number(settingsRes.data?.service_fee_amount || 0),
       restaurantName: restRes.data?.name || "",
       restaurantSlug: restRes.data?.slug || "",
       logoUrl: restRes.data?.logo_url || "",

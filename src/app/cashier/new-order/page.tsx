@@ -28,7 +28,7 @@ import {
   stopSyncManager,
   configureSyncFunctions,
 } from "@/lib/offline/sync-manager";
-import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchMenuDataAction } from "@/app/cashier/actions";
+import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchMenuDataAction, fetchCashierBootstrapAction } from "@/app/cashier/actions";
 import PosTerminal from "@/app/cashier/PosTerminal";
 
 // ─── Types matching PosTerminal props ─────────────────────────────────────────
@@ -208,22 +208,23 @@ export default function NewOrderPage() {
     async function init() {
       let restaurantId = typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_id") : null;
 
-      try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("restaurant_id")
-            .eq("id", user.id)
-            .single();
-          if (profile?.restaurant_id) {
-            restaurantId = profile.restaurant_id;
-            localStorage.setItem("cached_restaurant_id", profile.restaurant_id);
+      if (navigator.onLine) {
+        try {
+          const bootstrap = await fetchCashierBootstrapAction();
+          if (bootstrap.restaurantId) {
+            restaurantId = bootstrap.restaurantId;
+            localStorage.setItem("cached_restaurant_id", bootstrap.restaurantId);
+            if (bootstrap.restaurantName) localStorage.setItem("cached_restaurant_name", bootstrap.restaurantName);
+            if (bootstrap.restaurantSlug) localStorage.setItem("cached_restaurant_slug", bootstrap.restaurantSlug);
+            if (bootstrap.logoUrl) localStorage.setItem("cached_restaurant_logo", bootstrap.logoUrl);
+            if (bootstrap.slogan) localStorage.setItem("cached_restaurant_slogan", bootstrap.slogan);
+            if (bootstrap.taxRate !== undefined) localStorage.setItem("cached_tax_rate", String(bootstrap.taxRate));
+            if (bootstrap.enableServiceFee !== undefined) localStorage.setItem("cached_enable_service_fee", String(bootstrap.enableServiceFee));
+            if (bootstrap.serviceFeeAmount !== undefined) localStorage.setItem("cached_service_fee_amount", String(bootstrap.serviceFeeAmount));
           }
+        } catch {
+          // Offline fallback
         }
-      } catch {
-        // Offline: use cached_restaurant_id from localStorage
       }
 
       if (!restaurantId || cancelled) return;
@@ -346,10 +347,10 @@ export default function NewOrderPage() {
         categories={categories}
         products={products}
         addons={addons}
-        currency={settings?.currency || "PKR"}
-        taxRate={Number(settings?.tax_rate || 0)}
-        enableServiceFee={Boolean(settings?.enable_service_fee)}
-        serviceFeeAmount={Number(settings?.service_fee_amount || 0)}
+        currency={settings?.currency || (typeof window !== "undefined" ? localStorage.getItem("cached_currency") || "PKR" : "PKR")}
+        taxRate={Number(settings?.tax_rate ?? (typeof window !== "undefined" ? parseFloat(localStorage.getItem("cached_tax_rate") || "0") || 0 : 0))}
+        enableServiceFee={Boolean(settings?.enable_service_fee ?? (typeof window !== "undefined" ? localStorage.getItem("cached_enable_service_fee") === "true" : false))}
+        serviceFeeAmount={Number(settings?.service_fee_amount ?? (typeof window !== "undefined" ? parseFloat(localStorage.getItem("cached_service_fee_amount") || "0") || 0 : 0))}
         restaurantId={restaurantId || ""}
         restaurantName={settings?.name || cachedBranding.name}
         restaurantSlug={settings?.slug || cachedBranding.slug}
