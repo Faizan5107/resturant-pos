@@ -102,6 +102,7 @@ interface PlaceOrderPayload {
   customer_phone?: string;
   delivery_address?: string;
   delivery_fee?: number;
+  service_fee?: number;
   notes?: string;
   items: Array<{
     variant_id: string;

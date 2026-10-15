@@ -248,9 +248,11 @@ export default function PosTerminal({
   };
 
   const subtotal = cart.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-  const appliedServiceFee = orderType === "dine_in" && (enableServiceFee || serviceFeeAmount > 0) ? Number(serviceFeeAmount || 0) : 0;
-  const total = subtotal + taxAmount + (orderType === "delivery" ? Number(deliveryFee || 0) : 0) + appliedServiceFee;
+  const taxAmount = taxRate > 0 ? (subtotal * taxRate) / 100 : 0;
+  const appliedDeliveryFee = orderType === "delivery" ? Number(deliveryFee || 0) : 0;
+  const isServiceFeeActive = Boolean((enableServiceFee || serviceFeeAmount > 0) && Number(serviceFeeAmount || 0) > 0);
+  const appliedServiceFee = orderType === "dine_in" && isServiceFeeActive ? Number(serviceFeeAmount || 0) : 0;
+  const total = subtotal + taxAmount + appliedDeliveryFee + appliedServiceFee;
 
   const clearForm = () => {
     setCart([]);
@@ -282,6 +284,7 @@ export default function PosTerminal({
       customer_name: customerName || undefined,
       customer_phone: customerPhone || undefined,
       delivery_fee: orderType === "delivery" ? Number(deliveryFee || 0) : undefined,
+      service_fee: orderType === "dine_in" ? appliedServiceFee : undefined,
       notes: orderNotes || undefined,
       items: cart.map((i) => ({
         variant_id: i.variant_id,
@@ -333,7 +336,7 @@ export default function PosTerminal({
         items: slipItems,
         subtotal,
         taxAmount,
-        deliveryFee,
+        deliveryFee: appliedDeliveryFee,
         serviceFee: appliedServiceFee,
         total,
         restaurantName: resolvedRestName,
@@ -702,11 +705,32 @@ export default function PosTerminal({
               </div>
             </div>
 
+            {/* Active Charges Indicator — always visible so cashier knows what applies */}
+            {(taxRate > 0 || (orderType === "dine_in" && isServiceFeeActive) || orderType === "delivery") && (
+              <div className="flex flex-wrap gap-1.5">
+                {taxRate > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 rounded-full px-2 py-0.5">
+                    🧾 Tax {taxRate}% applies
+                  </span>
+                )}
+                {orderType === "dine_in" && isServiceFeeActive && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 rounded-full px-2 py-0.5">
+                    🍽️ Service Fee {formatMoney(serviceFeeAmount, currency)} (Dine-In)
+                  </span>
+                )}
+                {orderType === "delivery" && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-zinc-100 text-zinc-700 border border-zinc-300 rounded-full px-2 py-0.5">
+                    🚚 Delivery Fee (enter below)
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               {orderType === "dine_in" && (
                 <div>
                   <label className="block text-[10px] font-semibold text-zinc-600 mb-0.5">
-                    Table No. {enableServiceFee && serviceFeeAmount > 0 && <span className="text-emerald-700 font-bold ml-1">(+ Service Fee: {formatMoney(serviceFeeAmount, currency)})</span>}
+                    Table No. {isServiceFeeActive && <span className="text-emerald-700 font-bold ml-1">(+ Service Fee: {formatMoney(serviceFeeAmount, currency)})</span>}
                   </label>
                   <input
                     type="text"
@@ -932,22 +956,28 @@ export default function PosTerminal({
                 <span>Subtotal</span>
                 <span className="font-mono">{formatMoney(subtotal, currency)}</span>
               </div>
+              {orderType === "delivery" && (
+                <div className="flex justify-between text-zinc-600">
+                  <span>🚚 Delivery Fee</span>
+                  <span className="font-mono font-medium">{formatMoney(appliedDeliveryFee, currency)}</span>
+                </div>
+              )}
+              {orderType === "dine_in" && isServiceFeeActive && (
+                <div className="flex justify-between items-center bg-amber-50 border border-amber-200 rounded px-2 py-1 -mx-1">
+                  <span className="text-amber-800 font-semibold flex items-center gap-1">
+                    🍽️ Service Fee
+                    <span className="text-[10px] bg-amber-200 text-amber-900 px-1 rounded font-bold uppercase tracking-wide">Dine-In</span>
+                  </span>
+                  <span className="font-mono font-bold text-amber-900">{formatMoney(appliedServiceFee, currency)}</span>
+                </div>
+              )}
               {taxRate > 0 && (
-                <div className="flex justify-between text-zinc-600">
-                  <span>Tax ({taxRate}%)</span>
-                  <span className="font-mono font-medium">{formatMoney(taxAmount, currency)}</span>
-                </div>
-              )}
-              {orderType === "delivery" && deliveryFee > 0 && (
-                <div className="flex justify-between text-zinc-600">
-                  <span>Delivery Fee</span>
-                  <span className="font-mono font-medium">{formatMoney(deliveryFee, currency)}</span>
-                </div>
-              )}
-              {orderType === "dine_in" && (enableServiceFee || serviceFeeAmount > 0) && (
-                <div className="flex justify-between text-zinc-600">
-                  <span>Service Fee (Dine-In)</span>
-                  <span className="font-mono font-medium">{formatMoney(appliedServiceFee, currency)}</span>
+                <div className="flex justify-between items-center bg-blue-50 border border-blue-200 rounded px-2 py-1 -mx-1">
+                  <span className="text-blue-800 font-semibold flex items-center gap-1">
+                    🧾 Tax
+                    <span className="text-[10px] bg-blue-200 text-blue-900 px-1 rounded font-bold">{taxRate}%</span>
+                  </span>
+                  <span className="font-mono font-bold text-blue-900">{formatMoney(taxAmount, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-bold text-black border-t border-zinc-200 pt-2 mt-1">

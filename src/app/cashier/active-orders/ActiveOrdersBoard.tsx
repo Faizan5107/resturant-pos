@@ -30,6 +30,8 @@ interface Order {
   status: string;
   subtotal: number;
   tax_amount: number;
+  delivery_fee?: number;
+  service_fee?: number;
   total: number;
   payment_method?: string;
   cancel_reason?: string;
@@ -144,6 +146,34 @@ export default function ActiveOrdersBoard({
   };
 
   const printBillSlip = (order: Order, isReprint = false) => {
+    const rawDeliveryFee = Number((order as any).delivery_fee || 0);
+    const rawServiceFee = Number((order as any).service_fee || 0);
+    const subtotal = Number(order.subtotal || 0);
+    const taxAmount = Number(order.tax_amount || 0);
+    const total = Number(order.total || 0);
+
+    let serviceFee = rawServiceFee;
+    if (order.order_type === "dine_in" && serviceFee <= 0) {
+      const impliedFee = Math.round(total - (subtotal + taxAmount));
+      if (impliedFee > 0) {
+        serviceFee = impliedFee;
+      } else if (typeof window !== "undefined") {
+        const cachedEnable = localStorage.getItem("cached_enable_service_fee") === "true";
+        const cachedAmt = parseFloat(localStorage.getItem("cached_service_fee_amount") || "0");
+        if ((cachedEnable || cachedAmt > 0) && cachedAmt > 0) {
+          serviceFee = cachedAmt;
+        }
+      }
+    }
+
+    let deliveryFee = rawDeliveryFee;
+    if (order.order_type === "delivery" && deliveryFee <= 0) {
+      const impliedFee = Math.round(total - (subtotal + taxAmount));
+      if (impliedFee > 0) {
+        deliveryFee = impliedFee;
+      }
+    }
+
     printOfflineBillSlip({
       orderNo: order.order_no,
       orderType: order.order_type || "dine_in",
@@ -152,11 +182,11 @@ export default function ActiveOrdersBoard({
       customerPhone: (order as any).customer_phone || "",
       currency,
       isReprint,
-      subtotal: Number(order.subtotal || 0),
-      taxAmount: Number(order.tax_amount || 0),
-      deliveryFee: Number((order as any).delivery_fee || 0),
-      serviceFee: Number((order as any).service_fee || 0),
-      total: Number(order.total || 0),
+      subtotal,
+      taxAmount,
+      deliveryFee,
+      serviceFee,
+      total,
       items: (order.order_items || []).map((i) => ({
         product_name: i.product_name,
         variant_name: i.variant_name,
@@ -237,12 +267,10 @@ export default function ActiveOrdersBoard({
     const targetOrder = riderPaymentOrder;
     setRiderPaymentOrder(null);
 
-    // 1. Immediately update local state to paid
+    // 1. Immediately update local state to paid (closes order from running orders)
     setOrders((prev) =>
       prev.map((o) => (o.id === targetOrder.id ? { ...o, status: "paid", payment_method: riderPaymentMethod } : o))
     );
-
-    printBillSlip(targetOrder);
 
     const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
     const isTempOrder = targetOrder.id.startsWith("outbox_") || targetOrder.id.startsWith("temp_");
@@ -784,7 +812,7 @@ export default function ActiveOrdersBoard({
                 disabled={loading}
                 className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded text-xs font-bold disabled:opacity-50"
               >
-                {loading ? "Processing..." : "Confirm & Print Receipt"}
+                {loading ? "Processing..." : "Confirm & Close Order"}
               </button>
             </div>
           </div>

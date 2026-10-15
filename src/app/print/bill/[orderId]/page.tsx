@@ -92,13 +92,29 @@ export default async function FinalBillPage({
           ? "Delivery"
           : order.order_type ?? "Dine-In";
 
-  const deliveryFee = order.order_type === "delivery" ? Number(order.delivery_fee || 0) : 0;
-  const serviceFee = order.order_type === "dine_in" ? Number(order.service_fee || 0) : 0;
+  let deliveryFee = order.order_type === "delivery" ? Number(order.delivery_fee || 0) : 0;
+  let serviceFee = order.order_type === "dine_in" ? Number(order.service_fee || 0) : 0;
   const subtotal = Number(order.subtotal || 0);
   const taxAmount = Number(order.tax_amount || 0);
   const discountAmount = Number(order.discount_amount || 0);
 
-  const netPayable = subtotal + taxAmount + deliveryFee + serviceFee - discountAmount;
+  if (order.order_type === "dine_in" && serviceFee <= 0) {
+    const implied = Math.round(Number(order.total || 0) - (subtotal + taxAmount - discountAmount));
+    if (implied > 0) {
+      serviceFee = implied;
+    } else if ((settings?.enable_service_fee || Number(settings?.service_fee_amount || 0) > 0) && Number(settings?.service_fee_amount || 0) > 0) {
+      serviceFee = Number(settings.service_fee_amount);
+    }
+  }
+
+  if (order.order_type === "delivery" && deliveryFee <= 0) {
+    const implied = Math.round(Number(order.total || 0) - (subtotal + taxAmount - discountAmount));
+    if (implied > 0) {
+      deliveryFee = implied;
+    }
+  }
+
+  const netPayable = order.total ? Number(order.total) : (subtotal + taxAmount + deliveryFee + serviceFee - discountAmount);
 
   return (
     <>
@@ -367,11 +383,11 @@ export default async function FinalBillPage({
           )}
 
           {/* Service fee: only applicable in dine in */}
-          {order.order_type === "dine_in" && (order.service_fee ?? 0) > 0 && (
+          {order.order_type === "dine_in" && serviceFee > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
               <span>Service Fee:</span>
               <span>
-                {currency} {Math.round(order.service_fee).toLocaleString()}
+                {currency} {Math.round(serviceFee).toLocaleString()}
               </span>
             </div>
           )}

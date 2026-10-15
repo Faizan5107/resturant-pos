@@ -221,7 +221,22 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
   const taxAmount = Number(data.taxAmount || 0);
   const discountAmount = Number(data.discountAmount || 0);
   const deliveryFee = Number(data.deliveryFee || 0);
-  const serviceFee = Number(data.serviceFee || 0);
+  let serviceFee = Number(data.serviceFee || 0);
+
+  if (orderType === "dine_in" && serviceFee <= 0) {
+    if (data.total !== undefined) {
+      const implied = Math.round(Number(data.total) - (subtotal + taxAmount + deliveryFee - discountAmount));
+      if (implied > 0) serviceFee = implied;
+    }
+    if (serviceFee <= 0 && typeof window !== "undefined") {
+      const cachedEnable = localStorage.getItem("cached_enable_service_fee") === "true";
+      const cachedAmt = parseFloat(localStorage.getItem("cached_service_fee_amount") || "0");
+      if ((cachedEnable || cachedAmt > 0) && cachedAmt > 0) {
+        serviceFee = cachedAmt;
+      }
+    }
+  }
+
   const total =
     data.total !== undefined
       ? Number(data.total)

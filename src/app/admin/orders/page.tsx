@@ -15,6 +15,8 @@ export default async function AdminOrdersPage() {
       status,
       subtotal,
       tax_amount,
+      delivery_fee,
+      service_fee,
       total,
       payment_method,
       cancel_reason,

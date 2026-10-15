@@ -104,42 +104,43 @@ export async function updateRestaurantSettingsAction(prevState: any, formData: F
     if (restError) console.error("Error updating restaurant:", restError);
   }
 
-  const baseUpdate: any = {
-    address: parse.data.address,
-    phone: parse.data.phone,
+  // Explicit restaurant_settings payload — only columns that exist in this table.
+  // Do NOT add slogan/logo_url/address/phone here; those live in the restaurants table.
+  const settingsPayload: Record<string, unknown> = {
+    restaurant_id: restaurantId,
     currency: parse.data.currency,
     timezone: parse.data.timezone,
     tax_rate: parse.data.taxRate,
-    receipt_footer: parse.data.receiptFooter || parse.data.slogan,
-    slogan: parse.data.slogan || parse.data.receiptFooter,
+    receipt_footer: parse.data.receiptFooter || parse.data.slogan || null,
     paper_width: parse.data.paperWidth,
     enable_service_fee: parse.data.enableServiceFee,
     service_fee_amount: parse.data.serviceFeeAmount,
+    enable_donation: parse.data.enableDonation,
+    donation_percentage: parse.data.donationPercentage,
     updated_at: new Date().toISOString(),
   };
 
-  if (newLogoUrl !== undefined) {
-    baseUpdate.logo_url = newLogoUrl;
-  }
-
-  // Update restaurant_settings table using adminClient
+  // Try with all columns first
   let { error } = await adminClient
     .from("restaurant_settings")
-    .update({
-      ...baseUpdate,
-      enable_donation: parse.data.enableDonation,
-      donation_percentage: parse.data.donationPercentage,
-    })
-    .eq("restaurant_id", restaurantId);
+    .upsert(settingsPayload, { onConflict: "restaurant_id" });
 
   if (error) {
-    delete baseUpdate.slogan;
-    delete baseUpdate.logo_url;
+    // Fallback: strip columns that might not exist in older schema versions
+    const { receipt_footer, paper_width, enable_donation, donation_percentage, ...coreSettings } = settingsPayload;
     const { error: fallbackError } = await adminClient
       .from("restaurant_settings")
-      .update(baseUpdate)
-      .eq("restaurant_id", restaurantId);
+      .upsert(coreSettings, { onConflict: "restaurant_id" });
     if (fallbackError) return { error: fallbackError.message };
+  }
+
+  // Also save slogan to restaurant_settings if the column exists (best-effort, non-blocking)
+  if (parse.data.slogan) {
+    await adminClient
+      .from("restaurant_settings")
+      .update({ slogan: parse.data.slogan })
+      .eq("restaurant_id", restaurantId);
+    // Ignore error — column may not exist in all deployments
   }
 
   revalidatePath("/", "layout");

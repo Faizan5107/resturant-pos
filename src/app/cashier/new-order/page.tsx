@@ -125,16 +125,26 @@ export default function NewOrderPage() {
     const localEnableServiceFee = typeof window !== "undefined" ? localStorage.getItem("cached_enable_service_fee") === "true" : false;
     const localServiceFeeAmount = typeof window !== "undefined" ? parseFloat(localStorage.getItem("cached_service_fee_amount") || "") : NaN;
 
+    // Prefer localStorage (always kept fresh by bootstrap/refreshFromServer) over a
+    // potentially stale IDB value of 0/false — ?? only guards null/undefined, not 0.
+    const resolvedTaxRate = !isNaN(localTaxRate) ? localTaxRate : (settings?.tax_rate ?? 0);
+    const resolvedEnableServiceFee = typeof window !== "undefined"
+      ? localStorage.getItem("cached_enable_service_fee") !== null
+        ? localStorage.getItem("cached_enable_service_fee") === "true"
+        : (settings?.enable_service_fee ?? false)
+      : (settings?.enable_service_fee ?? false);
+    const resolvedServiceFeeAmount = !isNaN(localServiceFeeAmount) ? localServiceFeeAmount : (settings?.service_fee_amount ?? 0);
+
     const mergedSettings = settings ? {
       ...settings,
-      tax_rate: settings.tax_rate ?? (!isNaN(localTaxRate) ? localTaxRate : 0),
-      enable_service_fee: settings.enable_service_fee ?? localEnableServiceFee,
-      service_fee_amount: settings.service_fee_amount ?? (!isNaN(localServiceFeeAmount) ? localServiceFeeAmount : 0),
+      tax_rate: resolvedTaxRate,
+      enable_service_fee: resolvedEnableServiceFee,
+      service_fee_amount: resolvedServiceFeeAmount,
     } : {
       currency: "PKR",
-      tax_rate: !isNaN(localTaxRate) ? localTaxRate : 0,
-      enable_service_fee: localEnableServiceFee,
-      service_fee_amount: !isNaN(localServiceFeeAmount) ? localServiceFeeAmount : 0,
+      tax_rate: resolvedTaxRate,
+      enable_service_fee: resolvedEnableServiceFee,
+      service_fee_amount: resolvedServiceFeeAmount,
     };
 
     setData({ categories, products, addons: addonList, settings: mergedSettings as any, restaurantId });
@@ -208,6 +218,14 @@ export default function NewOrderPage() {
     async function init() {
       let restaurantId = typeof window !== "undefined" ? localStorage.getItem("cached_restaurant_id") : null;
 
+      // Hoist bootstrap result so we can apply it directly after loadFromIdb
+      let freshSettings: {
+        currency: string;
+        tax_rate: number;
+        enable_service_fee: boolean;
+        service_fee_amount: number;
+      } | null = null;
+
       if (navigator.onLine) {
         try {
           const bootstrap = await fetchCashierBootstrapAction();
@@ -218,12 +236,33 @@ export default function NewOrderPage() {
             if (bootstrap.restaurantSlug) localStorage.setItem("cached_restaurant_slug", bootstrap.restaurantSlug);
             if (bootstrap.logoUrl) localStorage.setItem("cached_restaurant_logo", bootstrap.logoUrl);
             if (bootstrap.slogan) localStorage.setItem("cached_restaurant_slogan", bootstrap.slogan);
-            if (bootstrap.taxRate !== undefined) localStorage.setItem("cached_tax_rate", String(bootstrap.taxRate));
-            if (bootstrap.enableServiceFee !== undefined) localStorage.setItem("cached_enable_service_fee", String(bootstrap.enableServiceFee));
-            if (bootstrap.serviceFeeAmount !== undefined) localStorage.setItem("cached_service_fee_amount", String(bootstrap.serviceFeeAmount));
+            localStorage.setItem("cached_tax_rate", String(bootstrap.taxRate ?? 0));
+            localStorage.setItem("cached_enable_service_fee", bootstrap.enableServiceFee ? "true" : "false");
+            localStorage.setItem("cached_service_fee_amount", String(bootstrap.serviceFeeAmount ?? 0));
+            localStorage.setItem("cached_currency", bootstrap.currency || "PKR");
+
+            // Track fresh server values to patch state after loadFromIdb
+            freshSettings = {
+              currency: bootstrap.currency || "PKR",
+              tax_rate: bootstrap.taxRate ?? 0,
+              enable_service_fee: Boolean(bootstrap.enableServiceFee),
+              service_fee_amount: bootstrap.serviceFeeAmount ?? 0,
+            };
+
+            await saveSettings({
+              restaurant_id: bootstrap.restaurantId,
+              currency: bootstrap.currency || "PKR",
+              tax_rate: bootstrap.taxRate ?? 0,
+              enable_service_fee: Boolean(bootstrap.enableServiceFee),
+              service_fee_amount: bootstrap.serviceFeeAmount ?? 0,
+              name: bootstrap.restaurantName || "",
+              slug: bootstrap.restaurantSlug || "",
+              logo_url: bootstrap.logoUrl || "",
+              slogan: bootstrap.slogan || "",
+            });
           }
         } catch {
-          // Offline fallback
+          // Offline fallback — use cached values
         }
       }
 
@@ -256,15 +295,27 @@ export default function NewOrderPage() {
       // Start sync manager
       startSyncManager(restaurantId);
 
-      // Load IDB first (instant, works offline)
+      // Load IDB (instant, works offline)
       await loadFromIdb(restaurantId);
       if (cancelled) return;
+
+      // If we got fresh settings from the server, patch them directly into state.
+      // This guarantees stale IDB/localStorage zeros never override the live DB values.
+      if (freshSettings) {
+        setData((prev) => ({
+          ...prev,
+          settings: {
+            ...(prev.settings as any),
+            ...freshSettings,
+          },
+        }));
+      }
 
       // Read last sync time for UI
       const lastSync = await getMeta(`lastMenuSync_${restaurantId}`);
       if (lastSync) setLastSyncTime(lastSync as number);
 
-      // Then refresh from server in background
+      // Then refresh menu from server in background
       refreshFromServer(restaurantId).catch(console.warn);
     }
 

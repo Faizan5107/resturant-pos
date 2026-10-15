@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { getOrderDateString } from "@/lib/dates";
 
 export async function placeOrderAction(
@@ -13,6 +13,7 @@ export async function placeOrderAction(
     customer_phone?: string;
     delivery_address?: string;
     delivery_fee?: number;
+    service_fee?: number;
     notes?: string;
     items: Array<{
       variant_id: string;
@@ -120,10 +121,17 @@ export async function placeOrderAction(
       const taxAmount = Math.round((subtotal * (taxRate / 100)) * 100) / 100;
       const deliveryFee = ord.order_type === "delivery" ? Number(payload.delivery_fee || 0) : 0;
 
-      // Apply service fee only for dine-in if enabled in settings
+      // Apply service fee only for dine-in if enabled in settings or passed in payload
       const enableServiceFee = settings?.enable_service_fee ?? false;
       const serviceFeeAmount = Number(settings?.service_fee_amount || 0);
-      const serviceFee = ord.order_type === "dine_in" && enableServiceFee ? serviceFeeAmount : 0;
+      const serviceFee =
+        ord.order_type === "dine_in"
+          ? payload.service_fee !== undefined
+            ? Number(payload.service_fee)
+            : (enableServiceFee || serviceFeeAmount > 0)
+              ? serviceFeeAmount
+              : 0
+          : 0;
 
       const newTotal = subtotal + taxAmount + deliveryFee + serviceFee;
 
@@ -238,7 +246,7 @@ export async function fetchOrdersAction(): Promise<{
       .from("orders")
       .select(`
         id, order_no, order_type, table_no, customer_name, status,
-        subtotal, tax_amount, total, payment_method, cancel_reason,
+        subtotal, tax_amount, delivery_fee, service_fee, total, payment_method, cancel_reason,
         created_at, updated_at,
         order_items(id, product_name, variant_name, unit_price, quantity, line_total, notes)
       `)
@@ -294,19 +302,20 @@ export async function fetchCashierBootstrapAction(): Promise<{
 
     if (!profile?.restaurant_id) return { error: "Restaurant not found" };
 
+    const adminClient = createAdminClient();
     const [prodRes, settingsRes, restRes] = await Promise.all([
-      supabase
+      adminClient
         .from("products")
         .select("id, code, name, status, product_variants(id, name, sale_price)")
         .neq("status", "hidden")
         .order("sort_order", { ascending: true })
         .order("code", { ascending: true }),
-      supabase
+      adminClient
         .from("restaurant_settings")
         .select("currency, tax_rate, enable_service_fee, service_fee_amount, slogan")
         .eq("restaurant_id", profile.restaurant_id)
         .maybeSingle(),
-      supabase
+      adminClient
         .from("restaurants")
         .select("name, slug, logo_url")
         .eq("id", profile.restaurant_id)
@@ -405,9 +414,9 @@ export async function fetchMenuDataAction(): Promise<{
     const prodIds = (prodsRes.data || []).map((p: any) => p.id);
     const varRes = prodIds.length > 0
       ? await adminClient
-          .from("product_variants")
-          .select("id, product_id, name, sale_price")
-          .in("product_id", prodIds)
+        .from("product_variants")
+        .select("id, product_id, name, sale_price")
+        .in("product_id", prodIds)
       : { data: [] };
 
     return {
@@ -546,7 +555,7 @@ export async function addItemsToOrderAction(payload: {
   // Fetch current order
   const { data: order, error: orderErr } = await adminClient
     .from("orders")
-    .select("id, status, subtotal, tax_amount, total, delivery_fee, restaurant_id")
+    .select("id, status, subtotal, tax_amount, total, delivery_fee, service_fee, restaurant_id")
     .eq("id", payload.orderId)
     .eq("restaurant_id", profile.restaurant_id)
     .single();
@@ -652,7 +661,8 @@ export async function addItemsToOrderAction(payload: {
   const newSubtotal = Number(order.subtotal) + addedSubtotal;
   const newTaxAmount = Math.round(newSubtotal * (taxRate / 100) * 100) / 100;
   const deliveryFee = Number((order as any).delivery_fee || 0);
-  const newTotal = newSubtotal + newTaxAmount + deliveryFee;
+  const serviceFee = Number((order as any).service_fee || 0);
+  const newTotal = newSubtotal + newTaxAmount + deliveryFee + serviceFee;
 
   await adminClient
     .from("orders")

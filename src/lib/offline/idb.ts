@@ -41,6 +41,8 @@ export interface OrderEntry {
   status: string;
   subtotal: number;
   tax_amount: number;
+  delivery_fee?: number;
+  service_fee?: number;
   total: number;
   payment_method?: string;
   cancel_reason?: string;

@@ -93,6 +93,8 @@ export default function ActiveOrdersPage() {
           status: o.status,
           subtotal: o.subtotal,
           tax_amount: o.tax_amount,
+          delivery_fee: Number((o as any).delivery_fee || 0),
+          service_fee: Number((o as any).service_fee || 0),
           total: o.total,
           payment_method: o.payment_method,
           cancel_reason: o.cancel_reason,

@@ -39,7 +39,23 @@ function OfflineBillSlipContent() {
   const taxAmount = Number(searchParams.get("taxAmount") || 0);
   const discountAmount = Number(searchParams.get("discountAmount") || 0);
   const deliveryFee = Number(searchParams.get("deliveryFee") || 0);
-  const serviceFee = Number(searchParams.get("serviceFee") || 0);
+  let serviceFee = Number(searchParams.get("serviceFee") || 0);
+
+  if (orderType === "dine_in" && serviceFee <= 0) {
+    const rawTotal = Number(searchParams.get("total") || 0);
+    if (rawTotal > 0) {
+      const implied = Math.round(rawTotal - (subtotal + taxAmount + deliveryFee - discountAmount));
+      if (implied > 0) serviceFee = implied;
+    }
+    if (serviceFee <= 0 && typeof window !== "undefined") {
+      const cachedEnable = localStorage.getItem("cached_enable_service_fee") === "true";
+      const cachedAmt = parseFloat(localStorage.getItem("cached_service_fee_amount") || "0");
+      if ((cachedEnable || cachedAmt > 0) && cachedAmt > 0) {
+        serviceFee = cachedAmt;
+      }
+    }
+  }
+
   const total = Number(searchParams.get("total") || (subtotal + taxAmount + deliveryFee + serviceFee - discountAmount));
 
   let items: BillItem[] = [];
