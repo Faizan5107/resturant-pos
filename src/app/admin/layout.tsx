@@ -1,33 +1,17 @@
 import AdminNav from "./AdminNav";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/lib/server-data";
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  const profile = await getProfile();
+  if (!profile) redirect("/login?role=admin");
 
-  // Middleware already validated the user and role — use getSession() here
-  // (reads from cookie, no network round-trip) to get the user id cheaply.
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    redirect("/login");
-  }
-
-  // Single DB query for display data only — role guard is already done by middleware
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, restaurants(name, logo_url)")
-    .eq("id", session.user.id)
-    .single();
-
-  const restaurantName = (profile?.restaurants as any)?.name || "Restaurant Admin";
-  const restaurantLogo = (profile?.restaurants as any)?.logo_url;
+  const restaurantName = profile.restaurants?.name || "Restaurant Admin";
+  const restaurantLogo = profile.restaurants?.logo_url;
 
 
   return (

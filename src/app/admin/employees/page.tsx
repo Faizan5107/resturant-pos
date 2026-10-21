@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/lib/server-data";
 import { formatDate } from "@/lib/dates";
 import CreateCashierModal from "./CreateCashierModal";
 import EditEmployeeModal from "./EditEmployeeModal";
@@ -6,18 +7,17 @@ import EditEmployeeModal from "./EditEmployeeModal";
 export default async function AdminEmployeesPage() {
   const supabase = await createClient();
 
-  const { data: currentProfile } = await supabase
-    .from("profiles")
-    .select("restaurant_id, restaurants(slug)")
-    .single();
+  const currentProfile = await getProfile();
 
-  const restaurantSlug = (currentProfile?.restaurants as any)?.slug || "";
+  const restaurantSlug = currentProfile?.restaurants?.slug || "";
 
-  // Query profiles for current restaurant
-  const { data: profiles } = await supabase
+  const { data: profiles, error } = await supabase
     .from("profiles")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select("id, full_name, role, is_active, created_at")
+    .eq("restaurant_id", currentProfile?.restaurant_id ?? "")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
 
   return (
     <div className="space-y-6">

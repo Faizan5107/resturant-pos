@@ -6,6 +6,9 @@
  * roundtrips, or Service Worker document routing.
  */
 
+import { BILL_FEED_MM, KITCHEN_FEED_MM } from "@/app/print/printConfig";
+import { getCachedLogoDataUrl } from "./logoCache";
+
 export interface OfflineSlipItem {
   product_name: string;
   variant_name?: string;
@@ -57,8 +60,8 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
   const notes = data.notes || "";
   const items = data.items || [];
   const restaurantName = data.restaurantName || "";
-  const restaurantSlug = data.restaurantSlug || "";
-  const logoUrl = data.logoUrl || "";
+  const cachedLogo = getCachedLogoDataUrl();
+  const logoUrl = (data.logoUrl?.startsWith("data:") ? data.logoUrl : cachedLogo) || data.logoUrl || "";
   const slogan = data.slogan || "";
 
   const orderTypeLabel =
@@ -142,14 +145,14 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
         margin: 0 !important;
         padding-left: 2mm !important;
         padding-right: 3mm !important;
-        padding-bottom: 50mm !important;
+        padding-bottom: ${KITCHEN_FEED_MM}mm !important;
         box-sizing: border-box !important;
       }
     }
   </style>
 </head>
 <body>
-  <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:5mm 3mm 25mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
+  <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:5mm 3mm ${KITCHEN_FEED_MM}mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
       ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
@@ -198,7 +201,8 @@ export function generateKitchenSlipHtml(data: OfflineKitchenSlipData): string {
       PREPARE IMMEDIATELY
     </div>
 
-    <div style="height:20mm;"></div>
+    <!-- Paper feed past cutter blade (increase KITCHEN_FEED_MM in printConfig.ts if cutter cuts into text) -->
+    <div style="height:${KITCHEN_FEED_MM}mm;"></div>
   </div>
 </body>
 </html>`;
@@ -213,8 +217,8 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
   const currency = data.currency || "PKR";
   const isReprint = !!data.isReprint;
   const restaurantName = data.restaurantName || "RESTAURANT";
-  const restaurantSlug = data.restaurantSlug || "";
-  const logoUrl = data.logoUrl || "";
+  const cachedBillLogo = getCachedLogoDataUrl();
+  const logoUrl = (data.logoUrl?.startsWith("data:") ? data.logoUrl : cachedBillLogo) || data.logoUrl || "";
   const slogan = data.slogan || "";
 
   const subtotal = Number(data.subtotal || 0);
@@ -333,14 +337,14 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
         margin: 0 !important;
         padding-left: 2mm !important;
         padding-right: 3mm !important;
-        padding-bottom: 80mm !important;
+        padding-bottom: ${BILL_FEED_MM}mm !important;
         box-sizing: border-box !important;
       }
     }
   </style>
 </head>
 <body>
-  <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:0 3mm 35mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
+  <div class="receipt-container" style="font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;width:75mm;max-width:75mm;margin:0;padding:0 3mm ${BILL_FEED_MM}mm 2mm;font-size:11px;line-height:1.4;box-sizing:border-box;">
     <div style="text-align:center;margin-bottom:6px;">
       ${headerLogoOrName}
       ${slogan ? `<div style="font-size:13px;font-weight:bold;margin-top:2px;">${escapeHtml(slogan)}</div>` : ""}
@@ -429,12 +433,13 @@ export function generateBillSlipHtml(data: OfflineBillSlipData): string {
 
     <div style="border-bottom:1px dashed #000;margin:6px 0;"></div>
 
-    <div style="border-top:1px dashed #000;padding-top:6px;text-align:center;font-size:12px;font-weight:bold;color:#000;margin-bottom:30px;">
+    <div style="border-top:1px dashed #000;padding-top:6px;text-align:center;font-size:12px;font-weight:bold;color:#000;">
       <div>Developed by: Axor Solution</div>
       <div style="margin-top:2px;">Contact No: +923422352913</div>
     </div>
 
-    <div style="height:80mm;"></div>
+    <!-- Paper feed past cutter blade (increase BILL_FEED_MM in printConfig.ts if cutter cuts into text) -->
+    <div style="height:${BILL_FEED_MM}mm;"></div>
   </div>
 </body>
 </html>`;

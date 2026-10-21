@@ -1,28 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { getProfile, getSettings } from "@/lib/server-data";
 import SettingsForm from "./SettingsForm";
 
 export default async function AdminSettingsPage() {
-  const supabase = await createClient();
-
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  let restaurant = null;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("restaurant_id, restaurants(name, logo_url)")
-      .eq("id", user.id)
-      .single();
-
-    if (profile?.restaurants) {
-      restaurant = profile.restaurants as any;
-    }
-  }
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("*")
-    .single();
+  const [profile, settings] = await Promise.all([
+    getProfile(),
+    getSettings(
+      "address, phone, slogan, currency, timezone, tax_rate, receipt_footer, paper_width, enable_donation, donation_percentage, enable_service_fee, service_fee_amount"
+    ),
+  ]);
+  if (!profile) redirect("/login?role=admin");
 
   return (
     <div className="space-y-6">
@@ -37,8 +24,8 @@ export default async function AdminSettingsPage() {
 
       <SettingsForm 
         initialSettings={settings || { currency: "PKR", timezone: "Asia/Karachi", tax_rate: 0 }}
-        restaurantName={restaurant?.name || ""}
-        logoUrl={restaurant?.logo_url || ""}
+        restaurantName={profile.restaurants?.name || ""}
+        logoUrl={profile.restaurants?.logo_url || ""}
       />
     </div>
   );

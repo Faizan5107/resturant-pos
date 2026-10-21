@@ -1,8 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { formatDateTime } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import PrintTrigger from "../../PrintTrigger";
+import { BILL_FEED_MM } from "../../printConfig";
 
 export default async function FinalBillPage({
   params,
@@ -35,10 +37,14 @@ export default async function FinalBillPage({
 
   if (!order) notFound();
 
-  const { createAdminClient } = await import("@/lib/supabase/server");
   const adminClient = createAdminClient();
 
-  const [{ data: settings }, { data: restaurant }] = await Promise.all([
+  const [
+    { data: settings },
+    { data: restaurant },
+    { data: profile },
+    { count: previousPrints },
+  ] = await Promise.all([
     adminClient
       .from("restaurant_settings")
       .select("*")
@@ -49,38 +55,42 @@ export default async function FinalBillPage({
       .select("name, slug, logo_url")
       .eq("id", order.restaurant_id)
       .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("full_name, restaurant_id, restaurants(name, slug, logo_url)")
+      .single(),
+    supabase
+      .from("order_events")
+      .select("*", { count: "exact", head: true })
+      .eq("order_id", orderId)
+      .eq("event", "bill_printed"),
   ]);
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, restaurant_id, restaurants(name, slug, logo_url)")
-    .single();
+  // profile.restaurants is a nested Supabase join — cast once via a typed intermediate
+  const profileRestaurant = profile?.restaurants as
+    | { name?: string; slug?: string; logo_url?: string }
+    | undefined;
+  const profileAny = profile as { restaurant_id?: string } | null;
+  const settingsAny = settings as { logo_url?: string } | null;
 
   const restaurantName =
-    restaurant?.name || (profile?.restaurants as any)?.name || "Restaurant";
-  const restaurantSlug =
-    restaurant?.slug || (profile?.restaurants as any)?.slug || "";
-  const logoUrl = restaurant?.logo_url || (settings as any)?.logo_url || (profile?.restaurants as any)?.logo_url;
+    restaurant?.name || profileRestaurant?.name || "Restaurant";
+  const logoUrl = restaurant?.logo_url || settingsAny?.logo_url || profileRestaurant?.logo_url;
   const currency = settings?.currency || "PKR";
   const slogan = settings?.slogan || settings?.receipt_footer || "";
   const address = settings?.address || "";
   const phone = settings?.phone || "";
   const taxRate = settings?.tax_rate || 0;
 
-  // Check previous bill_printed events for reprint detection
-  const { count: previousPrints } = await supabase
-    .from("order_events")
-    .select("*", { count: "exact", head: true })
-    .eq("order_id", orderId)
-    .eq("event", "bill_printed");
-
   const isReprint = sParams.reprint === "true" || (previousPrints ?? 0) > 0;
 
-  // Log event
-  await supabase.from("order_events").insert({
-    restaurant_id: order.restaurant_id || (profile as any)?.restaurant_id,
-    order_id: orderId,
-    event: isReprint ? "bill_reprinted" : "bill_printed",
+  // Log event asynchronously after response
+  after(async () => {
+    await adminClient.from("order_events").insert({
+      restaurant_id: order.restaurant_id || profileAny?.restaurant_id,
+      order_id: orderId,
+      event: isReprint ? "bill_reprinted" : "bill_printed",
+    });
   });
 
   const orderTypeLabel =
@@ -144,7 +154,7 @@ export default async function FinalBillPage({
             margin: 0 !important;
             padding-left: 2mm !important;
             padding-right: 3mm !important;
-            padding-bottom: 80mm !important;
+            padding-bottom: ${BILL_FEED_MM}mm !important;
             page-break-inside: avoid !important;
             break-inside: avoid !important;
             box-sizing: border-box !important;
@@ -164,7 +174,7 @@ export default async function FinalBillPage({
           width: "75mm",
           maxWidth: "75mm",
           margin: "0",
-          padding: "0 3mm 35mm 2mm",
+          padding: `0 3mm ${BILL_FEED_MM}mm 2mm`,
           fontSize: "11px",
           lineHeight: "1.4",
           boxSizing: "border-box",
@@ -174,6 +184,7 @@ export default async function FinalBillPage({
         <div style={{ textAlign: "center", marginBottom: "6px" }}>
           {logoUrl ? (
             <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- next/image cannot be used in print-only pages */}
               <img
                 src={logoUrl}
                 alt={restaurantName}
@@ -285,9 +296,18 @@ export default async function FinalBillPage({
 
         {/* ── 5. ITEMS LIST ── */}
         <div style={{ marginBottom: "6px" }}>
-          {order.order_items?.map((item: any) => {
+          {(order.order_items as Array<{
+            id: string;
+            product_name: string;
+            variant_name?: string;
+            unit_price: number;
+            quantity: number;
+            line_total: number;
+            notes?: string;
+            order_item_addons?: Array<{ addon_name: string; price_delta: number }>;
+          }>)?.map((item) => {
             const addonsTotal = (item.order_item_addons || []).reduce(
-              (sum: number, a: any) => sum + (Number(a.price_delta) || 0),
+              (sum, a) => sum + (Number(a.price_delta) || 0),
               0
             );
             const totalItemPrice = Number(item.line_total || 0) + addonsTotal * Number(item.quantity || 1);
@@ -315,7 +335,7 @@ export default async function FinalBillPage({
                   </span>
                 </div>
                 {/* Addons & Notes */}
-                {item.order_item_addons?.map((addon: any, idx: number) => (
+                {item.order_item_addons?.map((addon, idx) => (
                   <div
                     key={idx}
                     style={{
@@ -432,7 +452,6 @@ export default async function FinalBillPage({
             fontSize: "12px",
             fontWeight: "bold",
             color: "#000",
-            marginBottom: "30px",
           }}
         >
           <div>Developed by: Axor Solution </div>
@@ -441,8 +460,9 @@ export default async function FinalBillPage({
           >Contact No: +923422352913</div>
         </div>
 
-        {/* ── 10. THERMAL PAPER CUT FEED (Generous spacing to feed paper past hardware cutter blade) ── */}
-        <div style={{ height: "80mm" }} />
+        {/* ── 10. THERMAL PAPER CUT FEED ── */}
+        {/* Value depends on where the printer's cutter sits; increase BILL_FEED_MM in printConfig.ts if cutter cuts into text */}
+        <div style={{ height: `${BILL_FEED_MM}mm` }} />
       </div>
     </>
   );

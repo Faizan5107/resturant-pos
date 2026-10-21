@@ -10,9 +10,11 @@
  *      &tableNo=T4&items=[{…}]&notes=…
  */
 
-import { useEffect, Suspense } from "react";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import PrintTrigger from "../../PrintTrigger";
+import { KITCHEN_FEED_MM } from "../../printConfig";
+import { getCachedLogoDataUrl } from "@/lib/offline/logoCache";
 
 interface SlipItem {
   product_name: string;
@@ -31,8 +33,11 @@ function OfflineKitchenSlipContent() {
   const notes     = searchParams.get("notes")     || "";
   const restaurantName = searchParams.get("restaurantName") || searchParams.get("restaurant") || "";
   const slug = searchParams.get("slug") || searchParams.get("restaurantSlug") || "";
-  const logoUrl = searchParams.get("logoUrl") || "";
+  const rawLogoUrl = searchParams.get("logoUrl") || "";
   const slogan = searchParams.get("slogan") || "";
+
+  const cachedLogo = getCachedLogoDataUrl();
+  const logoUrl = (rawLogoUrl.startsWith("data:") ? rawLogoUrl : cachedLogo) || rawLogoUrl;
 
   let items: SlipItem[] = [];
   try {
@@ -65,7 +70,7 @@ function OfflineKitchenSlipContent() {
         @page { margin: 0; size: 80mm auto; }
         @media print {
           html, body { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
-          .receipt-container { width: 75mm !important; max-width: 75mm !important; margin: 0 !important; padding-left: 2mm !important; padding-right: 3mm !important; padding-bottom: 50mm !important; box-sizing: border-box !important; }
+          .receipt-container { width: 75mm !important; max-width: 75mm !important; margin: 0 !important; padding-left: 2mm !important; padding-right: 3mm !important; padding-bottom: ${KITCHEN_FEED_MM}mm !important; box-sizing: border-box !important; }
         }
       `}</style>
 
@@ -78,7 +83,7 @@ function OfflineKitchenSlipContent() {
           width: "75mm",
           maxWidth: "75mm",
           margin: "0",
-          padding: "5mm 3mm 25mm 2mm",
+          padding: `5mm 3mm ${KITCHEN_FEED_MM}mm 2mm`,
           fontSize: "11px",
           lineHeight: "1.4",
           boxSizing: "border-box",
@@ -221,7 +226,8 @@ function OfflineKitchenSlipContent() {
           PREPARE IMMEDIATELY
         </div>
 
-        <div style={{ height: "20mm" }} />
+        {/* Value depends on where the printer's cutter sits; increase KITCHEN_FEED_MM in printConfig.ts if cutter cuts into text */}
+        <div style={{ height: `${KITCHEN_FEED_MM}mm` }} />
       </div>
     </>
   );

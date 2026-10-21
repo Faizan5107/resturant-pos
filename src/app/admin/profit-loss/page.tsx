@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
+import { getSettings } from "@/lib/server-data";
 
 export default async function AdminProfitLossPage() {
   const supabase = await createClient();
@@ -9,16 +10,14 @@ export default async function AdminProfitLossPage() {
     .toISOString()
     .split("T")[0];
 
-  // Call get_profit_and_loss RPC
-  const { data: pnl } = await supabase.rpc("get_profit_and_loss", {
-    p_from: firstDayOfMonth,
-    p_to: today,
-  });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency")
-    .single();
+  const [{ data: pnl, error: pnlError }, settings] = await Promise.all([
+    supabase.rpc("get_profit_and_loss", {
+      p_from: firstDayOfMonth,
+      p_to: today,
+    }),
+    getSettings("currency"),
+  ]);
+  if (pnlError) throw pnlError;
 
   const currency = settings?.currency || "PKR";
 

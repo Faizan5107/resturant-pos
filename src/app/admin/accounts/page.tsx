@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
+import { getSettings } from "@/lib/server-data";
 import CreatePartyModal from "./CreatePartyModal";
 import RecordPaymentModal from "./RecordPaymentModal";
 import AddCreditModal from "./AddCreditModal";
@@ -8,28 +9,25 @@ import AddCreditModal from "./AddCreditModal";
 export default async function AdminAccountsPage() {
   const supabase = await createClient();
 
-  // Fetch Parties with balance
-  const { data: parties } = await supabase
-    .from("parties")
-    .select(`
-      *,
-      ledger_entries(debit, credit)
-    `)
-    .order("name", { ascending: true });
-
-  // Fetch Ledger Entries statement
-  const { data: ledgerEntries } = await supabase
-    .from("ledger_entries")
-    .select(`
-      *,
-      parties(name, type)
-    `)
-    .order("entry_date", { ascending: false });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency")
-    .single();
+  const [
+    { data: parties, error: partiesError },
+    { data: ledgerEntries, error: ledgerError },
+    settings,
+  ] = await Promise.all([
+    supabase
+      .from("parties")
+      .select("id, name, phone, type, ledger_entries(debit, credit)")
+      .order("name", { ascending: true })
+      .limit(500),
+    supabase
+      .from("ledger_entries")
+      .select("id, entry_date, description, debit, credit, parties(name, type)")
+      .order("entry_date", { ascending: false })
+      .limit(500),
+    getSettings("currency"),
+  ]);
+  if (partiesError) throw partiesError;
+  if (ledgerError) throw ledgerError;
 
   const currency = settings?.currency || "PKR";
 

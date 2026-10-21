@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+
 import {
   getMenuByType,
   getSettings,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/offline/sync-manager";
 import { placeOrderAction, updateOrderStatusAction, markOrderPaidAction, fetchMenuDataAction, fetchCashierBootstrapAction } from "@/app/cashier/actions";
 import PosTerminal from "@/app/cashier/PosTerminal";
+import { cacheLogoAsDataUrl } from "@/lib/offline/logoCache";
 
 // ─── Types matching PosTerminal props ─────────────────────────────────────────
 
@@ -178,7 +179,10 @@ export default function NewOrderPage() {
 
       if (restData?.name) localStorage.setItem("cached_restaurant_name", restData.name);
       if (restData?.slug) localStorage.setItem("cached_restaurant_slug", restData.slug);
-      if (restData?.logo_url) localStorage.setItem("cached_restaurant_logo", restData.logo_url);
+      if (restData?.logo_url) {
+        localStorage.setItem("cached_restaurant_logo", restData.logo_url);
+        cacheLogoAsDataUrl(restData.logo_url);
+      }
       if (settingsData?.slogan) localStorage.setItem("cached_restaurant_slogan", settingsData.slogan);
 
       if (settingsData) {
@@ -234,7 +238,10 @@ export default function NewOrderPage() {
             localStorage.setItem("cached_restaurant_id", bootstrap.restaurantId);
             if (bootstrap.restaurantName) localStorage.setItem("cached_restaurant_name", bootstrap.restaurantName);
             if (bootstrap.restaurantSlug) localStorage.setItem("cached_restaurant_slug", bootstrap.restaurantSlug);
-            if (bootstrap.logoUrl) localStorage.setItem("cached_restaurant_logo", bootstrap.logoUrl);
+            if (bootstrap.logoUrl) {
+              localStorage.setItem("cached_restaurant_logo", bootstrap.logoUrl);
+              cacheLogoAsDataUrl(bootstrap.logoUrl);
+            }
             if (bootstrap.slogan) localStorage.setItem("cached_restaurant_slogan", bootstrap.slogan);
             localStorage.setItem("cached_tax_rate", String(bootstrap.taxRate ?? 0));
             localStorage.setItem("cached_enable_service_fee", bootstrap.enableServiceFee ? "true" : "false");

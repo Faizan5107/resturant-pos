@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
 import { formatDate, getOrderDateString } from "@/lib/dates";
+import { getSettings } from "@/lib/server-data";
 import SalesChart from "./SalesChart";
 
 export default async function AdminSalesPage() {
@@ -9,16 +10,17 @@ export default async function AdminSalesPage() {
   const today = getOrderDateString();
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-  // Call get_daily_sales RPC
-  const { data: salesData } = await supabase.rpc("get_daily_sales", {
-    p_from: thirtyDaysAgo,
-    p_to: today,
-  });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency, enable_donation, donation_percentage")
-    .single();
+  const [
+    { data: salesData, error: salesError },
+    settings,
+  ] = await Promise.all([
+    supabase.rpc("get_daily_sales", {
+      p_from: thirtyDaysAgo,
+      p_to: today,
+    }),
+    getSettings("currency, enable_donation, donation_percentage"),
+  ]);
+  if (salesError) throw salesError;
 
   const currency = settings?.currency || "PKR";
   const enableDonation = Boolean(settings?.enable_donation);
@@ -122,4 +124,3 @@ export default async function AdminSalesPage() {
     </div>
   );
 }
-

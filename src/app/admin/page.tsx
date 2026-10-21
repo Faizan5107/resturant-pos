@@ -1,35 +1,22 @@
+import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
 import { getOrderDateString, formatDate } from "@/lib/dates";
+import { getProfile, getSettings } from "@/lib/server-data";
 
 export default async function AdminDashboardPage() {
-  const supabase = await createClient();
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, restaurants(name, slug)")
-    .single();
-
-  const restaurant = (profile?.restaurants as any);
-  // Shift 12:00 PM to 2:00 AM counts as a single day
   const today = getOrderDateString();
+  const [profile, settings] = await Promise.all([
+    getProfile(),
+    getSettings("currency, enable_donation, donation_percentage"),
+  ]);
+  if (!profile) redirect("/login?role=admin");
 
-  const { data: pnl } = await supabase.rpc("get_profit_and_loss", {
-    p_from: today,
-    p_to: today,
-  });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency, enable_donation, donation_percentage")
-    .single();
-
+  const restaurant = profile.restaurants;
   const currency = settings?.currency || "PKR";
   const enableDonation = Boolean(settings?.enable_donation);
   const donationPercentage = Number(settings?.donation_percentage || 0);
-  const donationAmount = enableDonation
-    ? ((Number(pnl?.net_sales) || 0) * donationPercentage) / 100
-    : 0;
 
   return (
     <div className="space-y-6">
@@ -38,10 +25,45 @@ export default async function AdminDashboardPage() {
           Dashboard
         </h1>
         <p className="text-xs text-zinc-500">
-          Welcome back, {profile?.full_name}. Overview for {restaurant?.name} today ({formatDate(today)}, Shift: 12:00 PM - 2:00 AM).
+          Welcome back, {profile.full_name}. Overview for {restaurant?.name} today ({formatDate(today)}, Shift: 12:00 PM - 2:00 AM).
         </p>
       </div>
 
+      <Suspense fallback={<DashboardMetricsFallback enableDonation={enableDonation} />}>
+        <DashboardMetrics
+          today={today}
+          currency={currency}
+          enableDonation={enableDonation}
+          donationPercentage={donationPercentage}
+        />
+      </Suspense>
+    </div>
+  );
+}
+
+async function DashboardMetrics({
+  today,
+  currency,
+  enableDonation,
+  donationPercentage,
+}: {
+  today: string;
+  currency: string;
+  enableDonation: boolean;
+  donationPercentage: number;
+}) {
+  const supabase = await createClient();
+  const { data: pnl, error } = await supabase.rpc("get_profit_and_loss", {
+    p_from: today,
+    p_to: today,
+  });
+  if (error) throw error;
+
+  const donationAmount = enableDonation
+    ? ((Number(pnl?.net_sales) || 0) * donationPercentage) / 100
+    : 0;
+
+  return (
       <div className={`grid gap-4 ${enableDonation ? "grid-cols-5" : "grid-cols-4"}`}>
         <div className="border border-black p-5 rounded-lg bg-white space-y-1">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
@@ -98,6 +120,18 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
       </div>
+  );
+}
+
+function DashboardMetricsFallback({ enableDonation }: { enableDonation: boolean }) {
+  return (
+    <div className={`grid gap-4 ${enableDonation ? "grid-cols-5" : "grid-cols-4"}`}>
+      {Array.from({ length: enableDonation ? 5 : 4 }, (_, index) => (
+        <div key={index} className="h-28 rounded-lg border border-zinc-200 bg-white p-5">
+          <div className="h-3 w-2/3 animate-pulse rounded bg-zinc-200" />
+          <div className="mt-5 h-7 w-1/2 animate-pulse rounded bg-zinc-100" />
+        </div>
+      ))}
     </div>
   );
 }

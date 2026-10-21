@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
+import { firstRelation } from "@/lib/relations";
+import { getSettings } from "@/lib/server-data";
 import CreateItemModal from "./CreateItemModal";
 import RecordPurchaseModal from "./RecordPurchaseModal";
 import StockAdjustmentModal from "./StockAdjustmentModal";
@@ -7,39 +9,54 @@ import StockAdjustmentModal from "./StockAdjustmentModal";
 export default async function AdminInventoryPage() {
   const supabase = await createClient();
 
-  // Query inventory_stock view
-  const { data: stockItems } = await supabase
-    .from("inventory_stock")
-    .select("*")
-    .order("name", { ascending: true });
-
-  // Query preferred supplier for items as initial fallback
-  const { data: rawItems } = await supabase
-    .from("inventory_items")
-    .select("id, preferred_supplier:parties(name)");
+  const [
+    { data: stockItems, error: stockError },
+    { data: rawItems, error: itemError },
+    { data: recentPurchases, error: purchasesError },
+    { data: suppliers, error: suppliersError },
+    settings,
+  ] = await Promise.all([
+    supabase
+      .from("inventory_stock")
+      .select("item_id, name, category, unit, reorder_level, avg_cost, quantity, status")
+      .order("name", { ascending: true })
+      .limit(1000),
+    supabase
+      .from("inventory_items")
+      .select("id, preferred_supplier:parties(name)")
+      .limit(1000),
+    supabase
+      .from("purchases")
+      .select(
+        "purchase_date, created_at, supplier:parties(name), purchase_items(item_id)"
+      )
+      .order("purchase_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1000),
+    supabase
+      .from("parties")
+      .select("id, name")
+      .eq("type", "supplier")
+      .order("name", { ascending: true })
+      .limit(500),
+    getSettings("currency"),
+  ]);
+  if (stockError) throw stockError;
+  if (itemError) throw itemError;
+  if (purchasesError) throw purchasesError;
+  if (suppliersError) throw suppliersError;
 
   const preferredSupplierMap = new Map<string, string>();
-  (rawItems || []).forEach((item: any) => {
-    if (item.preferred_supplier?.name) {
-      preferredSupplierMap.set(item.id, item.preferred_supplier.name);
+  (rawItems || []).forEach((item) => {
+    const preferredSupplier = firstRelation(item.preferred_supplier);
+    if (preferredSupplier?.name) {
+      preferredSupplierMap.set(item.id, preferredSupplier.name);
     }
   });
 
-  // Query purchases ordered descending to get the actual last supplier for each item
-  const { data: recentPurchases } = await supabase
-    .from("purchases")
-    .select(`
-      purchase_date,
-      created_at,
-      supplier:parties(name),
-      purchase_items(item_id)
-    `)
-    .order("purchase_date", { ascending: false })
-    .order("created_at", { ascending: false });
-
   const lastSupplierMap = new Map<string, string>();
-  (recentPurchases || []).forEach((p: any) => {
-    const supplierName = p.supplier?.name;
+  (recentPurchases || []).forEach((p) => {
+    const supplierName = firstRelation(p.supplier)?.name;
     if (supplierName && p.purchase_items) {
       p.purchase_items.forEach((pi: any) => {
         if (!lastSupplierMap.has(pi.item_id)) {
@@ -48,18 +65,6 @@ export default async function AdminInventoryPage() {
       });
     }
   });
-
-  // Query suppliers for dropdown
-  const { data: suppliers } = await supabase
-    .from("parties")
-    .select("id, name")
-    .eq("type", "supplier")
-    .order("name", { ascending: true });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency")
-    .single();
 
   const currency = settings?.currency || "PKR";
   const lowStockCount = (stockItems || []).filter((i) => i.status === "low" || i.status === "out").length;

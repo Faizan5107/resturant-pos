@@ -7,27 +7,42 @@ import ProductsTable from "./ProductsTable";
 export default async function AdminProductsPage() {
   const supabase = await createClient();
 
-  // Fetch categories for current restaurant
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name, sort_order, is_active")
-    .order("sort_order", { ascending: true });
-
-  // Fetch products with variants and variant_costs for current restaurant
-  const { data: products } = await supabase
-    .from("products")
-    .select(`
-      *,
-      categories(name),
-      product_variants(
+  const [
+    { data: categories, error: categoriesError },
+    { data: products, error: productsError },
+  ] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, name, sort_order, is_active")
+      .order("sort_order", { ascending: true })
+      .limit(500),
+    supabase
+      .from("products")
+      .select(`
         id,
+        code,
         name,
-        sale_price,
-        variant_costs(cost_price)
-      )
-    `)
-    .order("sort_order", { ascending: true })
-    .order("code", { ascending: true });
+        description,
+        image_url,
+        category_id,
+        kitchen_station,
+        tax_applicable,
+        status,
+        sort_order,
+        categories(name),
+        product_variants(
+          id,
+          name,
+          sale_price,
+          variant_costs(cost_price)
+        )
+      `)
+      .order("sort_order", { ascending: true })
+      .order("code", { ascending: true })
+      .limit(1000),
+  ]);
+  if (categoriesError) throw categoriesError;
+  if (productsError) throw productsError;
 
   return (
     <div className="space-y-6">

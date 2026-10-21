@@ -1,12 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
+import { getSettings } from "@/lib/server-data";
 import ActiveOrdersBoard from "@/app/cashier/active-orders/ActiveOrdersBoard";
 
 export default async function AdminOrdersPage() {
   const supabase = await createClient();
 
-  const { data: orders } = await supabase
-    .from("orders")
-    .select(`
+  const [
+    { data: orders, error: ordersError },
+    { data: products, error: productsError },
+    settings,
+  ] = await Promise.all([
+    supabase
+      .from("orders")
+      .select(`
       id,
       order_no,
       order_type,
@@ -30,12 +36,12 @@ export default async function AdminOrdersPage() {
         line_total,
         notes
       )
-    `)
-    .order("created_at", { ascending: false });
-
-  const { data: products } = await supabase
-    .from("products")
-    .select(`
+      `)
+      .order("created_at", { ascending: false })
+      .limit(500),
+    supabase
+      .from("products")
+      .select(`
       id,
       code,
       name,
@@ -45,14 +51,14 @@ export default async function AdminOrdersPage() {
         name,
         sale_price
       )
-    `)
-    .neq("status", "hidden")
-    .order("name", { ascending: true });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency")
-    .single();
+      `)
+      .neq("status", "hidden")
+      .order("name", { ascending: true })
+      .limit(1000),
+    getSettings("currency"),
+  ]);
+  if (ordersError) throw ordersError;
+  if (productsError) throw productsError;
 
   return (
     <div className="space-y-6">

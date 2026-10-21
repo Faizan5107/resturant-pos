@@ -10,6 +10,8 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import PrintTrigger from "../../PrintTrigger";
 import { formatMoney } from "@/lib/money";
+import { BILL_FEED_MM } from "../../printConfig";
+import { getCachedLogoDataUrl } from "@/lib/offline/logoCache";
 
 interface BillItem {
   product_name: string;
@@ -32,8 +34,11 @@ function OfflineBillSlipContent() {
   const isReprint = searchParams.get("reprint") === "true";
   const restaurantName = searchParams.get("restaurantName") || searchParams.get("restaurant") || "RESTAURANT";
   const slug = searchParams.get("slug") || searchParams.get("restaurantSlug") || "";
-  const logoUrl = searchParams.get("logoUrl") || "";
+  const rawLogoUrl = searchParams.get("logoUrl") || "";
   const slogan = searchParams.get("slogan") || "";
+
+  const cachedLogo = getCachedLogoDataUrl();
+  const logoUrl = (rawLogoUrl.startsWith("data:") ? rawLogoUrl : cachedLogo) || rawLogoUrl;
 
   const subtotal = Number(searchParams.get("subtotal") || 0);
   const taxAmount = Number(searchParams.get("taxAmount") || 0);
@@ -106,7 +111,7 @@ function OfflineBillSlipContent() {
             margin: 0 !important;
             padding-left: 2mm !important;
             padding-right: 3mm !important;
-            padding-bottom: 80mm !important;
+            padding-bottom: ${BILL_FEED_MM}mm !important;
             box-sizing: border-box !important;
           }
           .no-print { display: none !important; }
@@ -124,7 +129,7 @@ function OfflineBillSlipContent() {
           width: "75mm",
           maxWidth: "75mm",
           margin: "0",
-          padding: "0 3mm 35mm 2mm",
+          padding: `0 3mm ${BILL_FEED_MM}mm 2mm`,
           fontSize: "11px",
           lineHeight: "1.4",
           boxSizing: "border-box",
@@ -376,7 +381,6 @@ function OfflineBillSlipContent() {
             fontSize: "12px",
             fontWeight: "bold",
             color: "#000",
-            marginBottom: "30px",
           }}
         >
           <div>Developed by: Axor Solution </div>
@@ -385,7 +389,8 @@ function OfflineBillSlipContent() {
           >Contact No: +923422352913</div>
         </div>
 
-        <div style={{ height: "80mm" }} />
+        {/* Value depends on where the printer's cutter sits; increase BILL_FEED_MM in printConfig.ts if cutter cuts into text */}
+        <div style={{ height: `${BILL_FEED_MM}mm` }} />
       </div>
     </>
   );

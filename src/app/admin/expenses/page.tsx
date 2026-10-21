@@ -1,34 +1,41 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
+import { firstRelation } from "@/lib/relations";
+import { getSettings } from "@/lib/server-data";
 import CreateExpenseModal from "./CreateExpenseModal";
 
 export default async function AdminExpensesPage() {
   const supabase = await createClient();
 
-  const { data: categories } = await supabase
-    .from("expense_categories")
-    .select("id, name")
-    .order("name", { ascending: true });
-
-  const { data: employees } = await supabase
-    .from("employees")
-    .select("id, full_name")
-    .order("full_name", { ascending: true });
-
-  const { data: expenses } = await supabase
-    .from("expenses")
-    .select(`
-      *,
-      expense_categories(name),
-      employees(full_name)
-    `)
-    .order("expense_date", { ascending: false });
-
-  const { data: settings } = await supabase
-    .from("restaurant_settings")
-    .select("currency")
-    .single();
+  const [
+    { data: categories, error: categoriesError },
+    { data: employees, error: employeesError },
+    { data: expenses, error: expensesError },
+    settings,
+  ] = await Promise.all([
+    supabase
+      .from("expense_categories")
+      .select("id, name")
+      .order("name", { ascending: true })
+      .limit(500),
+    supabase
+      .from("employees")
+      .select("id, full_name")
+      .order("full_name", { ascending: true })
+      .limit(500),
+    supabase
+      .from("expenses")
+      .select(
+        "id, expense_date, category_id, employee_id, amount, note, expense_categories(name), employees(full_name)"
+      )
+      .order("expense_date", { ascending: false })
+      .limit(500),
+    getSettings("currency"),
+  ]);
+  if (categoriesError) throw categoriesError;
+  if (employeesError) throw employeesError;
+  if (expensesError) throw expensesError;
 
   const currency = settings?.currency || "PKR";
   const totalExpenses = (expenses || []).reduce((sum, e) => sum + Number(e.amount), 0);
@@ -80,13 +87,13 @@ export default async function AdminExpensesPage() {
                     {formatDate(e.expense_date)}
                   </td>
                   <td className="py-3 px-4 text-xs font-semibold">
-                    {(e.expense_categories as any)?.name || "Uncategorized"}
+                    {firstRelation(e.expense_categories)?.name || "Uncategorized"}
                   </td>
                   <td className="py-3 px-4 text-xs text-zinc-600">
                     {e.note || "-"}
                   </td>
                   <td className="py-3 px-4 text-xs text-zinc-600">
-                    {(e.employees as any)?.full_name || "-"}
+                    {firstRelation(e.employees)?.full_name || "-"}
                   </td>
                   <td className="py-3 px-4 text-xs font-bold text-black text-right">
                     {formatMoney(e.amount, currency)}
