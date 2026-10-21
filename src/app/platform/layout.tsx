@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import PlatformNav from "./PlatformNav";
 
@@ -29,6 +30,14 @@ export default async function PlatformLayout({
       {/* Fixed Left Sidebar */}
       <aside className="w-64 bg-black text-white flex flex-col fixed inset-y-0 left-0">
         <div className="p-6 border-b border-zinc-800">
+          <Image
+            src="/restrova-logo.png"
+            alt="Restrova Restaurant Management"
+            width={652}
+            height={191}
+            priority
+            className="mb-3 h-24 w-full rounded-md bg-white object-contain"
+          />
           <h1 className="font-bold text-lg tracking-tight">Platform Admin</h1>
           <p className="text-xs text-zinc-400">Multi-Restaurant SaaS</p>
         </div>
